@@ -1,0 +1,107 @@
+{
+  "project_name": "YTBoost.io",
+  "domain": "Finance / Dashboard / SMM Panel",
+  "theme": "Light for User Side, Dark for Admin Side",
+  "archetype": "User Choice mapped to Archetype 4 (Swiss/Functional Structure)",
+  "design_philosophy": {
+    "emotion": "Professional, Reliable, Frictionless",
+    "vibe": "Transactional, clear hierarchy, high-contrast structural design",
+    "anti_patterns": [
+      "Center-aligned everything",
+      "Gradient overload",
+      "Soft shadows on admin side",
+      "Missing visual hierarchy"
+    ]
+  },
+  "colors": {
+    "user_side": {
+      "mode": "light",
+      "background": "#f0f2f5",
+      "surface": "#ffffff",
+      "primary": "#7c3aed",
+      "hover": "#8b5cf6",
+      "active_nav_bg": "#f5f3ff",
+      "border": "#e5e7eb",
+      "text": "#111827",
+      "muted": "#6b7280"
+    },
+    "admin_side": {
+      "mode": "dark",
+      "background": "#0f172a",
+      "surface": "#1e293b",
+      "primary": "#7c3aed",
+      "border": "#334155",
+      "text": "#f1f5f9",
+      "muted": "#94a3b8"
+    },
+    "branding": {
+      "logo_red": "#ff0000",
+      "logo_dark": "#111111",
+      "logo_gray": "#888888"
+    }
+  },
+  "typography": {
+    "font_family": "Inter, sans-serif",
+    "scale": {
+      "h1": "text-4xl tracking-tight font-black",
+      "h2": "text-3xl tracking-tight font-bold",
+      "h3": "text-xl font-semibold",
+      "body": "text-base leading-relaxed text-[#111827] dark:text-[#f1f5f9]",
+      "small": "text-sm text-[#6b7280] dark:text-[#94a3b8]"
+    },
+    "rules": [
+      "No center-alignment by default",
+      "Overlines/Labels must be Uppercase + Tiny + Wide Spacing (tracking-[0.2em])",
+      "Always set text color on hover explicitly"
+    ]
+  },
+  "layout_spacing": {
+    "sidebar": "w-[280px] fixed h-full",
+    "main_content": "ml-[280px] min-h-screen pt-[72px] p-6 lg:p-8",
+    "topbar": "h-[72px] fixed top-0 w-[calc(100%-280px)] ml-[280px] z-40 backdrop-blur-xl bg-white/70 dark:bg-[#1e293b]/80 border-b border-[#e5e7eb] dark:border-[#334155]",
+    "radius": {
+      "inputs": "rounded-[8px]",
+      "cards": "rounded-[12px]"
+    },
+    "grid_strategy": {
+      "dashboard_stats": "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6",
+      "bento_layout": "grid-cols-1 lg:grid-cols-3 gap-6",
+      "tables": "w-full border-collapse"
+    }
+  },
+  "micro_themes": {
+    "user_cards": "Flat background (#ffffff), 1px solid border (#e5e7eb), no shadow by default, subtle -translate-y-1 on hover with shadow-sm.",
+    "admin_cards": "Flat dark background (#1e293b), crisp 1px solid border (#334155), no soft shadows, tactical technical look.",
+    "buttons": "Primary buttons use solid #7c3aed, hover #8b5cf6. Rounded 8px. Text color always white.",
+    "status_badges": "High contrast pill shapes, varying border colors based on status (e.g. green for completed, amber for pending, red for cancelled)."
+  },
+  "components": {
+    "ui_library": "Shadcn UI",
+    "icons": "lucide-react",
+    "charts": "Recharts (Shadcn Chart component)",
+    "forms": "React Hook Form + Zod, integrated with Shadcn Form. All inputs have 8px radius.",
+    "tables": "Shadcn Table component, left-aligned text, fixed headers",
+    "crypto_payment_monitor": "Live BEP20 payment session with custom QR code component, countdown timer, and real-time status updates via Socket.io."
+  },
+  "media": {
+    "image_urls": {
+      "avatar_1": "https://images.unsplash.com/photo-1704726135027-9c6f034cfa41?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTN8MHwxfHNlYXJjaHwyfHx1c2VyJTIwYXZhdGFyJTIwcG9ydHJhaXR8ZW58MHx8fHwxNzc1MTczNjU5fDA&ixlib=rb-4.1.0&q=85",
+      "avatar_2": "https://images.unsplash.com/photo-1639149888905-fb39731f2e6c?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NTN8MHwxfHNlYXJjaHwxfHx1c2VyJTIwYXZhdGFyJTIwcG9ydHJhaXR8ZW58MHx8fHwxNzc1MTczNjU5fDA&ixlib=rb-4.1.0&q=85",
+      "auth_bg_light": "https://images.unsplash.com/photo-1771873680097-7506773a2b02?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzh8MHwxfHNlYXJjaHwxfHxhYnN0cmFjdCUyMGdyYWRpZW50JTIwcHVycGxlJTIwZGFyayUyMHRlY2h8ZW58MHx8fHwxNzc1MTczNjc4fDA&ixlib=rb-4.1.0&q=85",
+      "auth_bg_dark": "https://images.pexels.com/photos/11829357/pexels-photo-11829357.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940"
+    },
+    "instructions": "Use auth_bg_light and auth_bg_dark for login/register split screens. Use avatar_1 and avatar_2 for user profile mockups or admin user lists."
+  },
+  "testing": {
+    "data_testid_rule": "All interactive and key informational elements MUST include a data-testid attribute (e.g., data-testid='login-submit-btn')."
+  },
+  "instructions_to_main_agent": [
+    "Strictly follow the color hex codes for the user side (light mode) and admin side (dark mode).",
+    "Ensure 'Inter' font is used globally.",
+    "Apply 8px border radius to inputs and 12px to cards.",
+    "Implement the live BEP20 payment session page meticulously with a visible countdown, QR code, and real-time waiting state.",
+    "Do NOT use transparent headers; use glassmorphism with backdrop-blur-xl and the specified surface color with opacity.",
+    "Ensure the sidebar is 280px wide.",
+    "Use data-testid attributes for testing."
+  ]
+}
