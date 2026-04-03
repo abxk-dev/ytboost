@@ -40,8 +40,8 @@ async def admin_login(request: AdminLoginRequest, response: Response):
     refresh_token = create_admin_refresh_token(admin_id)
     
     # Set admin cookies
-    response.set_cookie(key="admin_access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=1800, path="/")
-    response.set_cookie(key="admin_refresh_token", value=refresh_token, httponly=True, secure=False, samesite="lax", max_age=86400, path="/")
+    response.set_cookie(key="admin_access_token", value=access_token, httponly=True, secure=True, samesite="none", max_age=1800, path="/")
+    response.set_cookie(key="admin_refresh_token", value=refresh_token, httponly=True, secure=True, samesite="none", max_age=86400, path="/")
     
     return {
         'id': admin_id,
@@ -84,6 +84,6 @@ async def admin_refresh_token(request: Request, response: Response):
         raise HTTPException(status_code=401, detail="Admin not found")
     
     access_token = create_admin_access_token(admin_id, admin['email'])
-    response.set_cookie(key="admin_access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=1800, path="/")
+    response.set_cookie(key="admin_access_token", value=access_token, httponly=True, secure=True, samesite="none", max_age=1800, path="/")
     
     return {'message': 'Admin token refreshed'}

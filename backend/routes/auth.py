@@ -100,8 +100,8 @@ async def register(request: RegisterRequest, response: Response):
     refresh_token = create_refresh_token(user_id)
     
     # Set cookies
-    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=900, path="/")
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
+    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=True, samesite="none", max_age=900, path="/")
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=True, samesite="none", max_age=604800, path="/")
     
     return {
         'id': user_id,
@@ -137,8 +137,8 @@ async def login(request: LoginRequest, response: Response):
     refresh_token = create_refresh_token(user_id)
     
     # Set cookies
-    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=900, path="/")
-    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=False, samesite="lax", max_age=604800, path="/")
+    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=True, samesite="none", max_age=900, path="/")
+    response.set_cookie(key="refresh_token", value=refresh_token, httponly=True, secure=True, samesite="none", max_age=604800, path="/")
     
     return {
         'id': user_id,
@@ -187,7 +187,7 @@ async def refresh_token(request: Request, response: Response):
         raise HTTPException(status_code=401, detail="User not found")
     
     access_token = create_access_token(user_id, user['email'])
-    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=False, samesite="lax", max_age=900, path="/")
+    response.set_cookie(key="access_token", value=access_token, httponly=True, secure=True, samesite="none", max_age=900, path="/")
     
     return {'message': 'Token refreshed'}
 

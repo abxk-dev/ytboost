@@ -12,7 +12,7 @@ Build a complete full-stack YouTube SMM Panel called "YTBoost.io" with automated
 ## What's Been Implemented
 
 ### Backend (Python/FastAPI)
-- User & Admin JWT authentication (httpOnly cookies)
+- User & Admin JWT authentication (httpOnly cookies, Secure + SameSite=none for HTTPS)
 - Categories & Services CRUD
 - Order management with status tracking
 - Crypto payment sessions (BEP20 wallet generation + blockchain polling)
@@ -23,16 +23,14 @@ Build a complete full-stack YouTube SMM Panel called "YTBoost.io" with automated
 - Seed script for initial admin account, categories, services, crypto method, site settings
 
 ### Frontend (React)
-- **Public Landing Page** (Feb 2026): Home page at `/` with Hero, Services, Why Choose Us, How It Works, CTA, Footer. SEO meta tags via react-helmet-async. Live stats (orders + users) auto-refreshed every 30 seconds from backend API.
+- **Public Landing Page**: Home page at `/` with Hero, Services, Why Choose Us, How It Works, CTA, Footer. SEO meta tags via react-helmet-async. Live stats auto-refreshed every 30s.
 - Auth pages: Login, Register
 - User Dashboard: Overview, Orders, Add Order, Transactions, Add Funds (shows wallet address), Payment Session, Account, Change Password, API Access
 - Admin Dashboard: Overview, Categories, Services, Orders, Users, User Services, Fund Requests, Crypto Settings (wallet address editable), Settings
 
-### End-to-End Flows Working
-1. Admin updates BSC wallet address in `/admin/crypto-settings` → reflects immediately on user Add Funds page
-2. Landing page at `/` shows real-time stats (total orders, total users) from backend, auto-refreshing every 30s
-3. User registration → login → add funds → place order → track order
-4. Admin login → manage categories/services/orders/users/crypto settings
+### Bug Fixes (Apr 2026)
+- Fixed infinite redirect loop on login/register/admin-login pages caused by axios interceptor triggering `window.location.href` on expected 401s from `/auth/me` and `/auth/refresh`
+- Fixed cookie `Secure` and `SameSite` flags for HTTPS preview/production environments
 
 ## Key API Endpoints
 - `GET /api/stats/public` — public stats (no auth)

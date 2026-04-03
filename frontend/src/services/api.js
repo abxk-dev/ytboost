@@ -15,6 +15,13 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
+    const url = originalRequest.url || '';
+
+    // Skip interceptor for auth-check & refresh endpoints (expected to 401 when not logged in)
+    const skipUrls = ['/auth/me', '/auth/refresh', '/admin/auth/me', '/admin/auth/refresh'];
+    if (skipUrls.some(u => url.endsWith(u))) {
+      return Promise.reject(error);
+    }
     
     // If 401 and not already retrying, try to refresh token
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -22,16 +29,20 @@ api.interceptors.response.use(
       
       try {
         // Try refreshing the token
-        const isAdmin = originalRequest.url?.includes('/admin/');
+        const isAdmin = url.includes('/admin/');
         const refreshEndpoint = isAdmin ? '/admin/auth/refresh' : '/auth/refresh';
         await api.post(refreshEndpoint);
         
         // Retry original request
         return api(originalRequest);
       } catch (refreshError) {
-        // Redirect to login if refresh fails
-        const isAdmin = originalRequest.url?.includes('/admin/');
-        window.location.href = isAdmin ? '/admin/login' : '/login';
+        // Only redirect if not already on a login page
+        const path = window.location.pathname;
+        const isAdmin = url.includes('/admin/');
+        const loginPath = isAdmin ? '/admin/login' : '/login';
+        if (path !== loginPath && path !== '/register' && path !== '/') {
+          window.location.href = loginPath;
+        }
         return Promise.reject(refreshError);
       }
     }
