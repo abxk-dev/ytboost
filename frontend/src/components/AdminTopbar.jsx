@@ -22,7 +22,7 @@ export default function AdminTopbar({ onMenuClick }) {
   };
 
   return (
-    <header className={`fixed top-0 right-0 left-0 lg:left-[260px] h-[72px] ${c.topbar} backdrop-blur-xl border-b ${c.border} z-40 flex items-center justify-between px-4 lg:px-6`}>
+    <header className={`fixed top-0 right-0 left-0 lg:left-[260px] h-[72px] ${c.topbar} backdrop-blur-xl border-b ${c.border} z-50 flex items-center justify-between px-4 lg:px-6`}>
       <button
         onClick={onMenuClick}
         className="lg:hidden p-2 hover:bg-[#334155] rounded-lg"

@@ -28,7 +28,7 @@ function AdminLayoutInner() {
     <div className={`min-h-screen ${c.bg}`} data-testid="admin-layout">
       <AdminSidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
       <AdminTopbar onMenuClick={() => setSidebarOpen(true)} />
-      <main className="lg:ml-[260px] pt-[72px] p-4 lg:p-6 min-h-screen">
+      <main className="lg:ml-[260px] pt-[96px] pb-4 px-4 lg:pb-6 lg:px-6 min-h-screen">
         <Outlet />
       </main>
     </div>
