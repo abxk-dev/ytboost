@@ -5,41 +5,45 @@ Build a complete full-stack YouTube SMM Panel called "YTBoost.io" with automated
 
 ## Tech Stack
 - **Frontend**: React 19, React Router v7, Tailwind CSS, Shadcn/UI, Socket.io-client, react-helmet-async
-- **Backend**: Python FastAPI, python-socketio, Motor (async MongoDB)
+- **Backend**: Python FastAPI, python-socketio, Motor (async MongoDB), httpx
 - **Database**: MongoDB
 - **Payments**: BEP20 (BSC) USDT auto-detection via Web3/Ethers
 
 ## What's Been Implemented
 
 ### Backend (Python/FastAPI)
-- User & Admin JWT authentication (httpOnly cookies, Secure + SameSite=none for HTTPS)
-- Categories & Services CRUD
-- Order management with status tracking
+- User & Admin JWT authentication (httpOnly cookies, Secure + SameSite=none)
+- Categories CRUD with slug auto-generation
+- Services CRUD with type (Default/Refill 30d/60d/90d/Drip Feed/Custom), fulfillment method (Manual/Auto API), provider linking
+- Order management with status tracking, custom data, duration, refill history
+- API Providers CRUD with test connection, balance fetching
+- Auto-fulfillment via external SMM panel APIs (POST to provider on order creation)
 - Crypto payment sessions (BEP20 wallet generation + blockchain polling)
 - Socket.io for real-time payment updates
 - Admin settings & fund request management
-- Admin crypto methods CRUD (wallet address editable, reflects immediately in public API)
-- Public stats API endpoint (`GET /api/stats/public`) — no auth, returns totalOrders + totalUsers
+- Public stats API endpoint
 - Seed script for initial admin account, categories, services, crypto method, site settings
 
 ### Frontend (React)
-- **Public Landing Page**: Home page at `/` with Hero, Services, Why Choose Us, How It Works, CTA, Footer. SEO meta tags via react-helmet-async. Live stats auto-refreshed every 30s.
+- **Public Landing Page**: Home page at `/` with Hero, Services, Why Choose Us, How It Works, CTA, Footer. SEO meta tags. Live stats auto-refreshed every 30s.
 - Auth pages: Login, Register
-- User Dashboard: Overview, Orders, Add Order, Transactions, Add Funds (shows wallet address), Payment Session, Account, Change Password, API Access
-- Admin Dashboard: Overview, Categories, Services, Orders, Users, User Services, Fund Requests, Crypto Settings (wallet address editable), Settings
-
-### Bug Fixes (Apr 2026)
-- Fixed infinite redirect loop on login/register/admin-login pages caused by axios interceptor triggering `window.location.href` on expected 401s from `/auth/me` and `/auth/refresh`
-- Fixed cookie `Secure` and `SameSite` flags for HTTPS preview/production environments
+- User Dashboard: Overview, Orders (with refill button), Add Order (dynamic form by service type), Transactions, Add Funds (shows wallet address), Payment Session, Account, Change Password, API Access
+- Admin Dashboard: Overview with stats, Recent Orders, Recent Payments
+- Admin Categories: Full CRUD with slug field, delete confirmation with service count check
+- Admin Services: Full CRUD with type badges, fulfillment method (Manual/Auto API), provider linking, info card fields
+- Admin Orders: Expandable rows with service type, custom data, refill history, refill badges
+- Admin API Providers: Full CRUD with test connection, balance refresh, show/hide API key
+- Admin Day/Night Mode: Theme toggle (Sun/Moon) persisted to localStorage
+- Admin Crypto Settings: Wallet address management
+- Admin Users, User Services, Fund Requests, Site Settings
 
 ## Key API Endpoints
-- `GET /api/stats/public` — public stats (no auth)
-- `GET /api/crypto/methods` — public active payment methods (includes wallet address)
-- `POST /api/auth/login`, `/api/auth/register`
-- `POST /api/admin/auth/login`
-- `POST /api/crypto/create-session`
-- `GET /api/services`, `/api/categories`
-- `PUT /api/admin/crypto-methods/{id}` — update wallet address (admin)
+- Categories: GET/POST `/api/admin/categories`, PUT/DELETE `/api/admin/categories/{id}`
+- Services: GET/POST `/api/admin/services`, PUT/DELETE/PATCH `/api/admin/services/{id}`
+- API Providers: GET/POST `/api/admin/api-providers`, PUT/DELETE `/api/admin/api-providers/{id}`, POST `/api/admin/api-providers/test`, GET `/api/admin/api-providers/{id}/balance`
+- Orders: POST `/api/orders`, POST `/api/orders/{id}/refill`
+- Auth: POST `/api/auth/login`, `/api/auth/register`, POST `/api/admin/auth/login`
+- Public: GET `/api/stats/public`, GET `/api/crypto/methods`
 
 ## Test Credentials
 - Admin: admin@ytboost.io / Admin@123
@@ -47,4 +51,4 @@ Build a complete full-stack YouTube SMM Panel called "YTBoost.io" with automated
 
 ## Prioritized Backlog
 - **P2**: Implement actual Email Service (currently mocked/skipped per user instruction)
-- **Note**: Backend is Python/FastAPI (user originally requested Node.js/Express) — works perfectly, no action unless user requests rewrite
+- **P3**: Cron job to auto-check order status from provider APIs
