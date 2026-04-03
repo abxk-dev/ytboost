@@ -231,6 +231,18 @@ async def admin_get_dashboard_stats(request: Request):
         'recentSessions': recent_sessions_data
     }
 
+# Public stats for landing page
+@router.get("/stats/public")
+async def get_public_stats():
+    """Get public stats for the landing page (no auth required)"""
+    total_orders = await db.orders.count_documents({})
+    total_users = await db.users.count_documents({'role': {'$ne': 'admin'}})
+
+    return {
+        'totalOrders': total_orders,
+        'totalUsers': total_users
+    }
+
 # User dashboard stats
 @router.get("/dashboard/stats")
 async def get_user_dashboard_stats(request: Request):

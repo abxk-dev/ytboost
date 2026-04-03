@@ -120,6 +120,11 @@ export default function AddFunds() {
                   </div>
                   <p className="text-sm text-[#6b7280]">{method.network} Network</p>
                   <p className="text-xs text-[#6b7280] mt-1">Min: ${method.minAmount}</p>
+                  {method.address && (
+                    <p className="text-xs text-[#6b7280] mt-1 font-mono truncate" data-testid={`method-address-${method.coinName}`} title={method.address}>
+                      Wallet: {method.address}
+                    </p>
+                  )}
                 </button>
               ))}
             </div>

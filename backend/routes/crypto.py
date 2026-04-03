@@ -38,6 +38,7 @@ async def get_crypto_methods():
             'id': str(method['_id']),
             'coinName': method['coinName'],
             'network': method['network'],
+            'address': method.get('address', ''),
             'minAmount': method.get('minAmount', 1),
             'instructions': method.get('instructions', ''),
             'qrCodeUrl': method.get('qrCodeUrl')

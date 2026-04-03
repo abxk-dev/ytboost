@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import './Home.css';
 import { Menu, X, Play, ChevronRight } from 'lucide-react';
+import api from '../services/api';
 
 export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const [liveStats, setLiveStats] = useState({ totalOrders: 0, totalUsers: 0 });
 
   useEffect(() => {
     const handleScroll = () => {
@@ -14,6 +16,20 @@ export default function Home() {
     };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const { data } = await api.get('/stats/public');
+        setLiveStats(data);
+      } catch (err) {
+        // silently fail - show defaults
+      }
+    };
+    fetchStats();
+    const interval = setInterval(fetchStats, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const services = [
@@ -127,13 +143,13 @@ export default function Home() {
             
             <div className="hero-stats">
               <div className="stat">
-                <span className="stat-number">2M+</span>
+                <span className="stat-number" data-testid="stat-orders">{liveStats.totalOrders > 0 ? liveStats.totalOrders.toLocaleString() : '0'}</span>
                 <span className="stat-label">Orders Completed</span>
               </div>
               <div className="stat-divider"></div>
               <div className="stat">
-                <span className="stat-number">50K+</span>
-                <span className="stat-label">Happy Creators</span>
+                <span className="stat-number" data-testid="stat-users">{liveStats.totalUsers > 0 ? liveStats.totalUsers.toLocaleString() : '0'}</span>
+                <span className="stat-label">Active Users</span>
               </div>
               <div className="stat-divider"></div>
               <div className="stat">
