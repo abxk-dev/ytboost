@@ -5,6 +5,9 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 from datetime import datetime, timezone
 from bson import ObjectId
+import logging
+
+logger = logging.getLogger(__name__)
 from typing import Optional
 import re
 
@@ -101,6 +104,31 @@ async def create_order(request: Request, data: OrderCreate):
     await db.users.update_one({'_id': user_id}, {'$set': {'balance': new_balance}})
     
     # Create order
+    fulfillment = service.get('fulfillmentType', 'manual')
+    provider_name = ''
+    provider_order_id = ''
+    
+    if fulfillment == 'auto' and service.get('providerId'):
+        provider = await db.api_providers.find_one({'_id': service['providerId']})
+        if provider:
+            provider_name = provider['name']
+            # Auto-send to provider
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=15) as client_http:
+                    resp = await client_http.post(provider['apiUrl'], data={
+                        'key': provider['apiKey'],
+                        'action': 'add',
+                        'service': service.get('providerServiceId', ''),
+                        'link': data.link,
+                        'quantity': data.quantity,
+                    })
+                    result = resp.json()
+                    if 'order' in result:
+                        provider_order_id = str(result['order'])
+            except Exception as e:
+                logger.error(f"Auto-fulfillment failed: {e}")
+
     order_doc = {
         'userId': user_id,
         'serviceId': service_id,
@@ -113,6 +141,9 @@ async def create_order(request: Request, data: OrderCreate):
         'remains': data.quantity,
         'customData': data.customData or '',
         'duration': data.duration or '',
+        'fulfillmentType': fulfillment,
+        'providerName': provider_name,
+        'providerOrderId': provider_order_id,
         'refillHistory': [],
         'createdAt': datetime.now(timezone.utc)
     }
@@ -182,6 +213,9 @@ async def get_user_orders(request: Request, page: int = 1, limit: int = 20, stat
             'duration': order.get('duration', ''),
             'refillEnabled': service.get('refillEnabled', False) if service else False,
             'refillHistory': order.get('refillHistory', []),
+            'fulfillmentType': order.get('fulfillmentType', 'manual'),
+            'providerName': order.get('providerName', ''),
+            'providerOrderId': order.get('providerOrderId', ''),
             'createdAt': order['createdAt']
         })
     
@@ -306,6 +340,9 @@ async def admin_get_orders(request: Request, page: int = 1, limit: int = 50, sta
             'customData': order.get('customData', ''),
             'duration': order.get('duration', ''),
             'refillHistory': order.get('refillHistory', []),
+            'fulfillmentType': order.get('fulfillmentType', 'manual'),
+            'providerName': order.get('providerName', ''),
+            'providerOrderId': order.get('providerOrderId', ''),
             'createdAt': order['createdAt']
         })
     

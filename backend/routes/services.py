@@ -27,6 +27,9 @@ class ServiceCreate(BaseModel):
     refillEnabled: bool = False
     packagePrice: Optional[float] = None
     packageDescription: str = ""
+    fulfillmentType: str = "manual"
+    providerId: Optional[str] = None
+    providerServiceId: Optional[str] = None
 
 class ServiceUpdate(BaseModel):
     name: Optional[str] = None
@@ -45,6 +48,9 @@ class ServiceUpdate(BaseModel):
     refillEnabled: Optional[bool] = None
     packagePrice: Optional[float] = None
     packageDescription: Optional[str] = None
+    fulfillmentType: Optional[str] = None
+    providerId: Optional[str] = None
+    providerServiceId: Optional[str] = None
 
 # Dependency injection placeholder
 db = None
@@ -64,6 +70,9 @@ def _service_fields(svc):
         'refillEnabled': svc.get('refillEnabled', False),
         'packagePrice': svc.get('packagePrice'),
         'packageDescription': svc.get('packageDescription', ''),
+        'fulfillmentType': svc.get('fulfillmentType', 'manual'),
+        'providerId': str(svc['providerId']) if svc.get('providerId') else None,
+        'providerServiceId': svc.get('providerServiceId', ''),
     }
 
 # Public routes
@@ -216,6 +225,9 @@ async def admin_create_service(request: Request, data: ServiceCreate):
         'refillEnabled': data.refillEnabled,
         'packagePrice': data.packagePrice,
         'packageDescription': data.packageDescription,
+        'fulfillmentType': data.fulfillmentType,
+        'providerId': ObjectId(data.providerId) if data.providerId else None,
+        'providerServiceId': data.providerServiceId or '',
         'createdAt': datetime.now(timezone.utc)
     }
     
@@ -280,6 +292,12 @@ async def admin_update_service(request: Request, service_id: str, data: ServiceU
         update_data['refillEnabled'] = data.refillEnabled
     if data.packagePrice is not None:
         update_data['packagePrice'] = data.packagePrice
+    if data.fulfillmentType is not None:
+        update_data['fulfillmentType'] = data.fulfillmentType
+    if data.providerId is not None:
+        update_data['providerId'] = ObjectId(data.providerId) if data.providerId else None
+    if data.providerServiceId is not None:
+        update_data['providerServiceId'] = data.providerServiceId
     
     if update_data:
         await db.services.update_one({'_id': obj_id}, {'$set': update_data})

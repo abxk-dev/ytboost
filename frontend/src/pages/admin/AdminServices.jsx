@@ -13,34 +13,38 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Loader2, Plus, Pencil, Trash2, Package, Search } from 'lucide-react';
 import { toast } from 'sonner';
 
-const SERVICE_TYPES = ['Default', 'Custom Comments', 'Package', 'Mention', 'Subscription'];
+const SERVICE_TYPES = ['Default', 'Refill 30d', 'Refill 60d', 'Refill 90d', 'Drip Feed', 'Custom'];
 const QUALITY_OPTIONS = ['Ultra High', 'High', 'Medium', 'Low'];
 const TYPE_BADGES = {
   'Default': 'bg-gray-500/20 text-gray-300 border-gray-500/30',
-  'Custom Comments': 'bg-blue-500/20 text-blue-300 border-blue-500/30',
-  'Package': 'bg-purple-500/20 text-purple-300 border-purple-500/30',
-  'Mention': 'bg-amber-500/20 text-amber-300 border-amber-500/30',
-  'Subscription': 'bg-teal-500/20 text-teal-300 border-teal-500/30',
+  'Refill 30d': 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+  'Refill 60d': 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+  'Refill 90d': 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+  'Drip Feed': 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+  'Custom': 'bg-teal-500/20 text-teal-300 border-teal-500/30',
 };
 const TYPE_BADGES_LIGHT = {
   'Default': 'bg-gray-100 text-gray-700 border-gray-200',
-  'Custom Comments': 'bg-blue-100 text-blue-700 border-blue-200',
-  'Package': 'bg-purple-100 text-purple-700 border-purple-200',
-  'Mention': 'bg-amber-100 text-amber-700 border-amber-200',
-  'Subscription': 'bg-teal-100 text-teal-700 border-teal-200',
+  'Refill 30d': 'bg-blue-100 text-blue-700 border-blue-200',
+  'Refill 60d': 'bg-blue-100 text-blue-700 border-blue-200',
+  'Refill 90d': 'bg-blue-100 text-blue-700 border-blue-200',
+  'Drip Feed': 'bg-amber-100 text-amber-700 border-amber-200',
+  'Custom': 'bg-teal-100 text-teal-700 border-teal-200',
 };
 const TYPE_ICONS = {
   'Default': '',
-  'Custom Comments': '\uD83D\uDCAC',
-  'Package': '\uD83D\uDCE6',
-  'Mention': '@',
-  'Subscription': '\uD83D\uDD01',
+  'Refill 30d': '\uD83D\uDD01',
+  'Refill 60d': '\uD83D\uDD01',
+  'Refill 90d': '\uD83D\uDD01',
+  'Drip Feed': '\uD83D\uDCA7',
+  'Custom': '\u2699\uFE0F',
 };
 
 const INITIAL_FORM = {
   name: '', categoryId: '', description: '', rate: '', minQty: '', maxQty: '',
   type: 'Default', status: true, startTime: '', speed: '', refillTime: '',
-  quality: '', country: '', refillEnabled: false, packagePrice: '', packageDescription: ''
+  quality: '', country: '', refillEnabled: false, packagePrice: '', packageDescription: '',
+  fulfillmentType: 'manual', providerId: '', providerServiceId: ''
 };
 
 export default function AdminServices() {
@@ -48,6 +52,7 @@ export default function AdminServices() {
   const c = t(theme);
   const [services, setServices] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -58,12 +63,14 @@ export default function AdminServices() {
 
   const fetchData = async () => {
     try {
-      const [svcRes, catRes] = await Promise.all([
+      const [svcRes, catRes, provRes] = await Promise.all([
         api.get('/admin/services'),
-        api.get('/admin/categories')
+        api.get('/admin/categories'),
+        api.get('/admin/api-providers')
       ]);
       setServices(svcRes.data);
       setCategories(catRes.data);
+      setProviders(provRes.data);
     } catch (error) {
       console.error('Failed to fetch data:', error);
     } finally {
@@ -90,7 +97,10 @@ export default function AdminServices() {
         refillTime: service.refillTime || '', quality: service.quality || '',
         country: service.country || '', refillEnabled: service.refillEnabled || false,
         packagePrice: service.packagePrice ? service.packagePrice.toString() : '',
-        packageDescription: service.packageDescription || ''
+        packageDescription: service.packageDescription || '',
+        fulfillmentType: service.fulfillmentType || 'manual',
+        providerId: service.providerId || '',
+        providerServiceId: service.providerServiceId || ''
       });
     } else {
       setEditing(null);
@@ -107,7 +117,9 @@ export default function AdminServices() {
       rate: parseFloat(formData.rate),
       minQty: parseInt(formData.minQty),
       maxQty: parseInt(formData.maxQty),
-      packagePrice: formData.packagePrice ? parseFloat(formData.packagePrice) : null
+      packagePrice: formData.packagePrice ? parseFloat(formData.packagePrice) : null,
+      providerId: formData.fulfillmentType === 'auto' ? formData.providerId : null,
+      providerServiceId: formData.fulfillmentType === 'auto' ? formData.providerServiceId : '',
     };
     try {
       if (editing) {
@@ -315,6 +327,39 @@ export default function AdminServices() {
                   <Switch checked={formData.refillEnabled} onCheckedChange={(v) => set('refillEnabled', v)} data-testid="svc-refill-toggle" />
                 </div>
               </div>
+            </div>
+
+            {/* Fulfillment */}
+            <div className={`border ${c.border} rounded-[8px] p-4 space-y-4`}>
+              <p className={`text-sm font-semibold ${c.textSecondary}`}>Fulfillment Method</p>
+              <div className="flex items-center gap-6">
+                <label className={`flex items-center gap-2 cursor-pointer text-sm ${c.text}`}>
+                  <input type="radio" name="fulfillment" checked={formData.fulfillmentType === 'manual'} onChange={() => set('fulfillmentType', 'manual')} className="accent-[#7c3aed]" />
+                  Manual
+                </label>
+                <label className={`flex items-center gap-2 cursor-pointer text-sm ${c.text}`}>
+                  <input type="radio" name="fulfillment" checked={formData.fulfillmentType === 'auto'} onChange={() => set('fulfillmentType', 'auto')} className="accent-[#7c3aed]" data-testid="fulfillment-auto" />
+                  Auto API
+                </label>
+              </div>
+              {formData.fulfillmentType === 'auto' && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Provider</Label>
+                    <Select value={formData.providerId} onValueChange={(v) => set('providerId', v)}>
+                      <SelectTrigger className={c.input} data-testid="provider-select"><SelectValue placeholder="Select provider" /></SelectTrigger>
+                      <SelectContent className={c.selectContent}>
+                        {providers.filter(p => p.status).map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Provider Service ID</Label>
+                    <Input value={formData.providerServiceId} onChange={(e) => set('providerServiceId', e.target.value)} placeholder="e.g. 1234" className={c.input} data-testid="provider-service-id" />
+                    <p className={`text-xs ${c.textMuted}`}>Find this in the provider's services list</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-between">

@@ -41,6 +41,7 @@ import AdminUserServices from "./pages/admin/AdminUserServices";
 import AdminFundRequests from "./pages/admin/AdminFundRequests";
 import AdminCryptoSettings from "./pages/admin/AdminCryptoSettings";
 import AdminSettings from "./pages/admin/AdminSettings";
+import AdminApiProviders from "./pages/admin/AdminApiProviders";
 
 function App() {
   return (
@@ -74,6 +75,7 @@ function App() {
                 <Route index element={<AdminDashboard />} />
                 <Route path="categories" element={<AdminCategories />} />
                 <Route path="services" element={<AdminServices />} />
+                <Route path="api-providers" element={<AdminApiProviders />} />
                 <Route path="orders" element={<AdminOrders />} />
                 <Route path="users" element={<AdminUsers />} />
                 <Route path="users/:userId/services" element={<AdminUserServices />} />

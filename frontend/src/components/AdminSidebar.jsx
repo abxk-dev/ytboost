@@ -11,6 +11,7 @@ import {
   Bitcoin,
   Settings,
   X,
+  Plug,
 } from 'lucide-react';
 
 export default function AdminSidebar({ isOpen, setIsOpen }) {
@@ -71,6 +72,10 @@ export default function AdminSidebar({ isOpen, setIsOpen }) {
             <NavLink to="/admin/services" className={navLinkClass} data-testid="admin-nav-services">
               <Package className="w-5 h-5" />
               Services
+            </NavLink>
+            <NavLink to="/admin/api-providers" className={navLinkClass} data-testid="admin-nav-api-providers">
+              <Plug className="w-5 h-5" />
+              API Providers
             </NavLink>
             <NavLink to="/admin/orders" className={navLinkClass} data-testid="admin-nav-orders">
               <ShoppingCart className="w-5 h-5" />

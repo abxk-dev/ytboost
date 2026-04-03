@@ -12,10 +12,12 @@ router = APIRouter(tags=["Categories"])
 # Request models
 class CategoryCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
+    slug: str = ""
     status: bool = True
 
 class CategoryUpdate(BaseModel):
     name: str = Field(None, min_length=1, max_length=100)
+    slug: str = None
     status: bool = None
 
 # Dependency injection placeholder
@@ -74,7 +76,7 @@ async def admin_create_category(request: Request, data: CategoryCreate):
     from middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
-    slug = slugify(data.name)
+    slug = data.slug.strip() if data.slug else slugify(data.name)
     
     # Check uniqueness
     existing = await db.categories.find_one({'$or': [{'name': data.name}, {'slug': slug}]})
@@ -115,7 +117,7 @@ async def admin_update_category(request: Request, category_id: str, data: Catego
     update_data = {}
     if data.name is not None:
         update_data['name'] = data.name
-        update_data['slug'] = slugify(data.name)
+        update_data['slug'] = data.slug.strip() if data.slug else slugify(data.name)
         
         # Check uniqueness
         existing = await db.categories.find_one({

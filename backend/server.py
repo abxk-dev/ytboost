@@ -18,7 +18,7 @@ import os
 import logging
 
 # Import routes
-from routes import auth, admin_auth, categories, services, orders, crypto, users, transactions, settings, apiv2
+from routes import auth, admin_auth, categories, services, orders, crypto, users, transactions, settings, apiv2, api_providers
 
 # Import services
 from services.blockchain_scheduler import start_blockchain_scheduler, stop_blockchain_scheduler
@@ -84,6 +84,7 @@ users.set_socket_manager(sio)
 transactions.set_db(db)
 settings.set_db(db)
 apiv2.set_db(db)
+api_providers.set_db(db)
 
 # Include all routers with /api prefix
 app.include_router(auth.router, prefix="/api")
@@ -96,6 +97,7 @@ app.include_router(users.router, prefix="/api")
 app.include_router(transactions.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
 app.include_router(apiv2.router, prefix="/api")
+app.include_router(api_providers.router, prefix="/api")
 
 # Root endpoint
 @app.get("/api")
