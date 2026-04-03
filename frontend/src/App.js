@@ -1,6 +1,7 @@
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "sonner";
+import { HelmetProvider } from "react-helmet-async";
 
 // Contexts
 import { AuthProvider } from "./context/AuthContext";
@@ -14,6 +15,9 @@ import AdminLayout from "./components/AdminLayout";
 // Auth Pages
 import Login from "./pages/auth/Login";
 import Register from "./pages/auth/Register";
+
+// Public Pages
+import Home from "./pages/Home";
 
 // User Dashboard Pages
 import Dashboard from "./pages/dashboard/Dashboard";
@@ -40,13 +44,14 @@ import AdminSettings from "./pages/admin/AdminSettings";
 
 function App() {
   return (
+    <HelmetProvider>
     <SettingsProvider>
       <AuthProvider>
         <AdminAuthProvider>
           <BrowserRouter>
             <Routes>
               {/* Public Routes */}
-              <Route path="/" element={<Navigate to="/login" replace />} />
+              <Route path="/" element={<Home />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
 
@@ -94,6 +99,7 @@ function App() {
         </AdminAuthProvider>
       </AuthProvider>
     </SettingsProvider>
+    </HelmetProvider>
   );
 }
 
