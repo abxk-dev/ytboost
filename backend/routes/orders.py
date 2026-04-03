@@ -15,6 +15,8 @@ class OrderCreate(BaseModel):
     serviceId: str
     link: str = Field(..., min_length=1)
     quantity: int = Field(..., gt=0)
+    customData: Optional[str] = None
+    duration: Optional[str] = None
 
 class OrderStatusUpdate(BaseModel):
     status: str = Field(..., pattern="^(Pending|Processing|In Progress|Completed|Partial|Cancelled)$")
@@ -76,8 +78,16 @@ async def create_order(request: Request, data: OrderCreate):
     if data.quantity < min_qty or data.quantity > max_qty:
         raise HTTPException(status_code=400, detail=f"Quantity must be between {min_qty} and {max_qty}")
     
-    # Calculate charge
-    charge = (data.quantity / 1000) * rate
+    # Calculate charge based on service type
+    svc_type = service.get('type', 'Default')
+    
+    if svc_type == 'Package':
+        charge = service.get('packagePrice', rate)
+    elif svc_type == 'Subscription' and data.duration:
+        multiplier = {'7d': 1.0, '14d': 1.8, '30d': 3.0}.get(data.duration, 1.0)
+        charge = ((data.quantity / 1000) * rate) * multiplier
+    else:
+        charge = (data.quantity / 1000) * rate
     
     # Get current user balance
     user_doc = await db.users.find_one({'_id': user_id})
@@ -94,12 +104,16 @@ async def create_order(request: Request, data: OrderCreate):
     order_doc = {
         'userId': user_id,
         'serviceId': service_id,
+        'serviceType': service.get('type', 'Default'),
         'link': data.link,
         'quantity': data.quantity,
         'charge': round(charge, 4),
         'status': 'Pending',
         'startCount': 0,
         'remains': data.quantity,
+        'customData': data.customData or '',
+        'duration': data.duration or '',
+        'refillHistory': [],
         'createdAt': datetime.now(timezone.utc)
     }
     
@@ -157,12 +171,17 @@ async def get_user_orders(request: Request, page: int = 1, limit: int = 20, stat
             'id': str(order['_id']),
             'serviceId': str(order['serviceId']),
             'serviceName': service['name'] if service else 'Unknown',
+            'serviceType': order.get('serviceType', service.get('type', 'Default') if service else 'Default'),
             'link': order['link'],
             'quantity': order['quantity'],
             'charge': order['charge'],
             'status': order['status'],
             'startCount': order.get('startCount', 0),
             'remains': order.get('remains', 0),
+            'customData': order.get('customData', ''),
+            'duration': order.get('duration', ''),
+            'refillEnabled': service.get('refillEnabled', False) if service else False,
+            'refillHistory': order.get('refillHistory', []),
             'createdAt': order['createdAt']
         })
     
@@ -172,6 +191,44 @@ async def get_user_orders(request: Request, page: int = 1, limit: int = 20, stat
         'page': page,
         'pages': (total + limit - 1) // limit
     }
+
+@router.post("/orders/{order_id}/refill")
+async def request_refill(request: Request, order_id: str):
+    """Request a refill for a completed order"""
+    from middleware.auth import get_current_user
+    
+    user = await get_current_user(request, db)
+    user_id = ObjectId(user['_id'])
+    
+    try:
+        obj_id = ObjectId(order_id)
+    except:
+        raise HTTPException(status_code=400, detail="Invalid order ID")
+    
+    order = await db.orders.find_one({'_id': obj_id, 'userId': user_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    
+    if order['status'] != 'Completed':
+        raise HTTPException(status_code=400, detail="Only completed orders can be refilled")
+    
+    # Check if service has refill enabled
+    service = await db.services.find_one({'_id': order['serviceId']})
+    if not service or not service.get('refillEnabled', False):
+        raise HTTPException(status_code=400, detail="Refill is not available for this service")
+    
+    # Add refill record
+    refill_record = {
+        'requestedAt': datetime.now(timezone.utc).isoformat(),
+        'status': 'Requested'
+    }
+    
+    await db.orders.update_one(
+        {'_id': obj_id},
+        {'$push': {'refillHistory': refill_record}}
+    )
+    
+    return {'message': 'Refill requested successfully'}
 
 @router.get("/orders/{order_id}")
 async def get_order(request: Request, order_id: str):
@@ -239,12 +296,16 @@ async def admin_get_orders(request: Request, page: int = 1, limit: int = 50, sta
             'userEmail': user['email'] if user else 'Unknown',
             'serviceId': str(order['serviceId']),
             'serviceName': service['name'] if service else 'Unknown',
+            'serviceType': order.get('serviceType', service.get('type', 'Default') if service else 'Default'),
             'link': order['link'],
             'quantity': order['quantity'],
             'charge': order['charge'],
             'status': order['status'],
             'startCount': order.get('startCount', 0),
             'remains': order.get('remains', 0),
+            'customData': order.get('customData', ''),
+            'duration': order.get('duration', ''),
+            'refillHistory': order.get('refillHistory', []),
             'createdAt': order['createdAt']
         })
     

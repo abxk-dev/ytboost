@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api, { formatApiError } from '../../services/api';
+import { useAdminTheme, t } from '../../context/AdminThemeContext';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -10,6 +11,8 @@ import { Loader2, Save, Upload, Settings } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AdminSettings() {
+  const { theme } = useAdminTheme();
+  const c = t(theme);
   const [settings, setSettings] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);

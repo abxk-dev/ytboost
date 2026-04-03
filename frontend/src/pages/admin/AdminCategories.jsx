@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api, { formatApiError } from '../../services/api';
+import { useAdminTheme, t } from '../../context/AdminThemeContext';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -11,6 +12,8 @@ import { Loader2, Plus, Pencil, Trash2, FolderTree } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function AdminCategories() {
+  const { theme } = useAdminTheme();
+  const c = t(theme);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);

@@ -1,17 +1,20 @@
 import React, { useState } from 'react';
 import { Outlet, Navigate } from 'react-router-dom';
 import { useAdminAuth } from '../context/AdminAuthContext';
+import { AdminThemeProvider, useAdminTheme, t } from '../context/AdminThemeContext';
 import AdminSidebar from './AdminSidebar';
 import AdminTopbar from './AdminTopbar';
 import { Loader2 } from 'lucide-react';
 
-export default function AdminLayout() {
+function AdminLayoutInner() {
   const { admin, loading } = useAdminAuth();
+  const { theme } = useAdminTheme();
+  const c = t(theme);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0f172a] flex items-center justify-center">
+      <div className={`min-h-screen ${c.bg} flex items-center justify-center`}>
         <Loader2 className="w-8 h-8 animate-spin text-[#7c3aed]" />
       </div>
     );
@@ -22,13 +25,20 @@ export default function AdminLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0f172a]">
+    <div className={`min-h-screen ${c.bg}`} data-testid="admin-layout">
       <AdminSidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
       <AdminTopbar onMenuClick={() => setSidebarOpen(true)} />
-      
       <main className="lg:ml-[260px] pt-[72px] p-4 lg:p-6 min-h-screen">
         <Outlet />
       </main>
     </div>
+  );
+}
+
+export default function AdminLayout() {
+  return (
+    <AdminThemeProvider>
+      <AdminLayoutInner />
+    </AdminThemeProvider>
   );
 }

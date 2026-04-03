@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api, { formatApiError } from '../../services/api';
+import { useAdminTheme, t } from '../../context/AdminThemeContext';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -12,6 +13,8 @@ import { Loader2, Search, Users, Pencil, Ban, CheckCircle, Star, ChevronLeft, Ch
 import { toast } from 'sonner';
 
 export default function AdminUsers() {
+  const { theme } = useAdminTheme();
+  const c = t(theme);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);

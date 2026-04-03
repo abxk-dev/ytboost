@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api, { formatApiError } from '../../services/api';
+import { useAdminTheme, t } from '../../context/AdminThemeContext';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -8,6 +9,8 @@ import { Loader2, Wallet, ChevronLeft, ChevronRight, ExternalLink, CheckCircle, 
 import { toast } from 'sonner';
 
 export default function AdminFundRequests() {
+  const { theme } = useAdminTheme();
+  const c = t(theme);
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);

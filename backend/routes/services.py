@@ -19,6 +19,14 @@ class ServiceCreate(BaseModel):
     maxQty: int = Field(..., gt=0)
     type: str = "Default"
     status: bool = True
+    startTime: str = ""
+    speed: str = ""
+    refillTime: str = ""
+    quality: str = ""
+    country: str = ""
+    refillEnabled: bool = False
+    packagePrice: Optional[float] = None
+    packageDescription: str = ""
 
 class ServiceUpdate(BaseModel):
     name: Optional[str] = None
@@ -29,6 +37,14 @@ class ServiceUpdate(BaseModel):
     maxQty: Optional[int] = None
     type: Optional[str] = None
     status: Optional[bool] = None
+    startTime: Optional[str] = None
+    speed: Optional[str] = None
+    refillTime: Optional[str] = None
+    quality: Optional[str] = None
+    country: Optional[str] = None
+    refillEnabled: Optional[bool] = None
+    packagePrice: Optional[float] = None
+    packageDescription: Optional[str] = None
 
 # Dependency injection placeholder
 db = None
@@ -36,6 +52,19 @@ db = None
 def set_db(database):
     global db
     db = database
+
+def _service_fields(svc):
+    """Common service field extractor"""
+    return {
+        'startTime': svc.get('startTime', ''),
+        'speed': svc.get('speed', ''),
+        'refillTime': svc.get('refillTime', ''),
+        'quality': svc.get('quality', ''),
+        'country': svc.get('country', ''),
+        'refillEnabled': svc.get('refillEnabled', False),
+        'packagePrice': svc.get('packagePrice'),
+        'packageDescription': svc.get('packageDescription', ''),
+    }
 
 # Public routes
 @router.get("/services")
@@ -55,7 +84,8 @@ async def get_services():
             'rate': svc['rate'],
             'minQty': svc['minQty'],
             'maxQty': svc['maxQty'],
-            'type': svc.get('type', 'Default')
+            'type': svc.get('type', 'Default'),
+            **_service_fields(svc)
         })
     
     return result
@@ -81,7 +111,7 @@ async def get_user_services(request: Request):
     
     result = []
     
-    # Add special services first (with ⭐)
+    # Add special services first (with star)
     for ss in special_services:
         svc = await db.services.find_one({'_id': ss['serviceId'], 'status': True})
         if svc:
@@ -96,7 +126,8 @@ async def get_user_services(request: Request):
                 'minQty': ss.get('minQty', svc['minQty']),
                 'maxQty': ss.get('maxQty', svc['maxQty']),
                 'type': svc.get('type', 'Default'),
-                'isSpecial': True
+                'isSpecial': True,
+                **_service_fields(svc)
             })
     
     # Add regular services (excluding special ones)
@@ -114,7 +145,8 @@ async def get_user_services(request: Request):
                 'minQty': svc['minQty'],
                 'maxQty': svc['maxQty'],
                 'type': svc.get('type', 'Default'),
-                'isSpecial': False
+                'isSpecial': False,
+                **_service_fields(svc)
             })
     
     return result
@@ -142,7 +174,8 @@ async def admin_get_services(request: Request):
             'maxQty': svc['maxQty'],
             'type': svc.get('type', 'Default'),
             'status': svc.get('status', True),
-            'createdAt': svc.get('createdAt')
+            'createdAt': svc.get('createdAt'),
+            **_service_fields(svc)
         })
     
     return result
@@ -175,6 +208,14 @@ async def admin_create_service(request: Request, data: ServiceCreate):
         'maxQty': data.maxQty,
         'type': data.type,
         'status': data.status,
+        'startTime': data.startTime,
+        'speed': data.speed,
+        'refillTime': data.refillTime,
+        'quality': data.quality,
+        'country': data.country,
+        'refillEnabled': data.refillEnabled,
+        'packagePrice': data.packagePrice,
+        'packageDescription': data.packageDescription,
         'createdAt': datetime.now(timezone.utc)
     }
     
@@ -231,6 +272,14 @@ async def admin_update_service(request: Request, service_id: str, data: ServiceU
         update_data['type'] = data.type
     if data.status is not None:
         update_data['status'] = data.status
+    for field in ['startTime', 'speed', 'refillTime', 'quality', 'country', 'packageDescription']:
+        val = getattr(data, field, None)
+        if val is not None:
+            update_data[field] = val
+    if data.refillEnabled is not None:
+        update_data['refillEnabled'] = data.refillEnabled
+    if data.packagePrice is not None:
+        update_data['packagePrice'] = data.packagePrice
     
     if update_data:
         await db.services.update_one({'_id': obj_id}, {'$set': update_data})
