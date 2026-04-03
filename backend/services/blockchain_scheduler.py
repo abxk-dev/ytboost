@@ -76,10 +76,86 @@ async def expire_old_sessions():
         )
         
         if result.modified_count > 0:
-            print(f"⏰ Expired {result.modified_count} payment sessions")
+            print(f"Expired {result.modified_count} payment sessions")
             
     except Exception as e:
         print(f"Expire sessions error: {str(e)}")
+
+STATUS_MAP = {
+    'Pending': 'Pending',
+    'In progress': 'In Progress',
+    'Processing': 'Processing',
+    'Completed': 'Completed',
+    'Partial': 'Partial',
+    'Canceled': 'Cancelled',
+    'Cancelled': 'Cancelled',
+}
+
+async def check_provider_orders():
+    """Check status of auto-fulfilled orders from external providers every 5 min"""
+    global db_instance
+
+    if db_instance is None:
+        return
+
+    try:
+        import httpx
+
+        orders = await db_instance.orders.find({
+            'fulfillmentType': 'auto',
+            'providerOrderId': {'$ne': '', '$exists': True},
+            'status': {'$in': ['Pending', 'Processing', 'In Progress']},
+        }).to_list(200)
+
+        if not orders:
+            return
+
+        # Group orders by provider for efficiency
+        provider_cache = {}
+        for order in orders:
+            service = await db_instance.services.find_one({'_id': order['serviceId']})
+            if not service or not service.get('providerId'):
+                continue
+            pid = service['providerId']
+            if pid not in provider_cache:
+                provider = await db_instance.api_providers.find_one({'_id': pid})
+                if provider and provider.get('status', True):
+                    provider_cache[pid] = provider
+
+            provider = provider_cache.get(pid)
+            if not provider:
+                continue
+
+            try:
+                async with httpx.AsyncClient(timeout=10) as client:
+                    resp = await client.post(provider['apiUrl'], data={
+                        'key': provider['apiKey'],
+                        'action': 'status',
+                        'order': order['providerOrderId'],
+                    })
+                    result = resp.json()
+
+                new_status = STATUS_MAP.get(result.get('status', ''))
+                if not new_status or new_status == order['status']:
+                    continue
+
+                update = {'status': new_status}
+                if 'start_count' in result:
+                    update['startCount'] = int(result['start_count'])
+                if 'remains' in result:
+                    update['remains'] = int(result['remains'])
+
+                await db_instance.orders.update_one(
+                    {'_id': order['_id']},
+                    {'$set': update}
+                )
+                print(f"Order {order['_id']} status: {order['status']} -> {new_status}")
+
+            except Exception as e:
+                print(f"Provider status check failed for order {order['_id']}: {e}")
+
+    except Exception as e:
+        print(f"Provider order check error: {e}")
 
 def start_blockchain_scheduler(db, socket_manager=None):
     """Start the blockchain monitoring scheduler"""
@@ -106,8 +182,16 @@ def start_blockchain_scheduler(db, socket_manager=None):
         replace_existing=True
     )
     
+    # Check provider order statuses every 5 minutes
+    scheduler.add_job(
+        check_provider_orders,
+        IntervalTrigger(minutes=5),
+        id='check_provider_orders',
+        replace_existing=True
+    )
+    
     scheduler.start()
-    print("✅ Blockchain scheduler started")
+    print("Blockchain scheduler started")
 
 def stop_blockchain_scheduler():
     """Stop the scheduler"""
