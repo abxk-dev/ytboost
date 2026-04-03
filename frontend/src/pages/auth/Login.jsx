@@ -47,6 +47,11 @@ export default function Login() {
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-[8px] text-sm" data-testid="login-error">
               {error}
+              {error.toLowerCase().includes('admin') && (
+                <Link to="/admin/login" className="block mt-2 text-[#7c3aed] hover:text-[#8b5cf6] font-medium underline" data-testid="admin-login-link">
+                  Go to Admin Login
+                </Link>
+              )}
             </div>
           )}
 

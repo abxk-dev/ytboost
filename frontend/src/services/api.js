@@ -17,8 +17,8 @@ api.interceptors.response.use(
     const originalRequest = error.config;
     const url = originalRequest.url || '';
 
-    // Skip interceptor for auth-check & refresh endpoints (expected to 401 when not logged in)
-    const skipUrls = ['/auth/me', '/auth/refresh', '/admin/auth/me', '/admin/auth/refresh'];
+    // Skip interceptor for auth endpoints (login, register, check, refresh)
+    const skipUrls = ['/auth/me', '/auth/refresh', '/auth/login', '/auth/register', '/admin/auth/me', '/admin/auth/refresh', '/admin/auth/login'];
     if (skipUrls.some(u => url.endsWith(u))) {
       return Promise.reject(error);
     }
