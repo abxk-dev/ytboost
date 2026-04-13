@@ -62,7 +62,7 @@ async def admin_get_users(
     to: str = None
 ):
     """Get all users (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     # Build query
@@ -126,7 +126,7 @@ async def admin_get_users(
 
 @router.post("/admin/users/bulk-balance")
 async def admin_bulk_add_balance(request: Request, data: BulkBalanceUpdate):
-    from middleware.admin import get_current_admin, log_admin_action, require_admin_role
+    from backend.middleware.admin import get_current_admin, log_admin_action, require_admin_role
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin", "manager"})
 
@@ -166,7 +166,7 @@ async def admin_bulk_add_balance(request: Request, data: BulkBalanceUpdate):
 
 @router.get("/admin/users/{user_id}/activity")
 async def admin_get_user_activity(request: Request, user_id: str, action: str = None):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     try:
         obj_id = ObjectId(user_id)
@@ -188,7 +188,7 @@ async def admin_get_user_activity(request: Request, user_id: str, action: str = 
 
 @router.post("/admin/users/{user_id}/notify")
 async def admin_notify_user(request: Request, user_id: str, data: NotifyUserRequest):
-    from middleware.admin import get_current_admin, log_admin_action, require_admin_role
+    from backend.middleware.admin import get_current_admin, log_admin_action, require_admin_role
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin", "manager", "support"})
     try:
@@ -211,7 +211,7 @@ async def admin_notify_user(request: Request, user_id: str, data: NotifyUserRequ
 
 @router.get("/admin/users/{user_id}/report")
 async def admin_user_report(request: Request, user_id: str):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     try:
         obj_id = ObjectId(user_id)
@@ -262,7 +262,7 @@ async def admin_user_report(request: Request, user_id: str):
 
 @router.get("/user/notifications")
 async def user_get_notifications(request: Request):
-    from middleware.auth import get_current_user
+    from backend.middleware.auth import get_current_user
     user = await get_current_user(request, db)
     user_id = ObjectId(user['_id'])
     notes = await db.notifications.find({'userId': user_id}).sort('createdAt', -1).limit(50).to_list(50)
@@ -283,7 +283,7 @@ async def user_get_notifications(request: Request):
 
 @router.put("/user/notifications/{notification_id}/read")
 async def user_mark_notification_read(request: Request, notification_id: str):
-    from middleware.auth import get_current_user
+    from backend.middleware.auth import get_current_user
     user = await get_current_user(request, db)
     user_id = ObjectId(user['_id'])
     try:
@@ -295,7 +295,7 @@ async def user_mark_notification_read(request: Request, notification_id: str):
 
 @router.put("/user/notifications/read-all")
 async def user_mark_all_read(request: Request):
-    from middleware.auth import get_current_user
+    from backend.middleware.auth import get_current_user
     user = await get_current_user(request, db)
     user_id = ObjectId(user['_id'])
     await db.notifications.update_many({'userId': user_id, 'read': False}, {'$set': {'read': True}})
@@ -303,7 +303,7 @@ async def user_mark_all_read(request: Request):
 
 @router.get("/user/referral")
 async def user_referral(request: Request):
-    from middleware.auth import get_current_user
+    from backend.middleware.auth import get_current_user
     user = await get_current_user(request, db)
     user_id = ObjectId(user['_id'])
 
@@ -334,7 +334,7 @@ async def user_referral(request: Request):
 @router.get("/admin/users/{user_id}")
 async def admin_get_user(request: Request, user_id: str):
     """Get single user details (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     try:
@@ -367,7 +367,7 @@ async def admin_get_user(request: Request, user_id: str):
 @router.put("/admin/users/{user_id}/balance")
 async def admin_update_user_balance(request: Request, user_id: str, data: BalanceUpdate):
     """Update user balance (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     try:
@@ -421,7 +421,7 @@ async def admin_update_user_balance(request: Request, user_id: str, data: Balanc
 @router.put("/admin/users/{user_id}/status")
 async def admin_update_user_status(request: Request, user_id: str):
     """Toggle user ban status (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     try:
@@ -444,7 +444,7 @@ async def admin_update_user_status(request: Request, user_id: str):
 @router.get("/admin/users/{user_id}/special-services")
 async def admin_get_user_special_services(request: Request, user_id: str):
     """Get user's special services (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     try:
@@ -486,7 +486,7 @@ async def admin_get_user_special_services(request: Request, user_id: str):
 @router.post("/admin/users/{user_id}/special-services")
 async def admin_create_user_special_service(request: Request, user_id: str, data: SpecialServiceCreate):
     """Assign special service to user (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     try:
@@ -536,7 +536,7 @@ async def admin_create_user_special_service(request: Request, user_id: str, data
 @router.put("/admin/users/{user_id}/special-services/{special_id}")
 async def admin_update_user_special_service(request: Request, user_id: str, special_id: str):
     """Update special service assignment (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     try:
@@ -559,7 +559,7 @@ async def admin_update_user_special_service(request: Request, user_id: str, spec
 @router.delete("/admin/users/{user_id}/special-services/{special_id}")
 async def admin_delete_user_special_service(request: Request, user_id: str, special_id: str):
     """Remove special service from user (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     try:
@@ -578,7 +578,7 @@ def _day_start(dt: datetime) -> datetime:
 
 @router.post("/user/api-key/regenerate")
 async def user_regenerate_api_key(request: Request):
-    from middleware.auth import get_current_user
+    from backend.middleware.auth import get_current_user
     user = await get_current_user(request, db)
     user_id = ObjectId(user["_id"])
     new_key = str(uuid.uuid4())
@@ -591,7 +591,7 @@ async def user_regenerate_api_key(request: Request):
 
 @router.get("/user/api-stats")
 async def user_api_stats(request: Request):
-    from middleware.auth import get_current_user
+    from backend.middleware.auth import get_current_user
     user = await get_current_user(request, db)
     user_id = ObjectId(user["_id"])
 
@@ -664,7 +664,7 @@ async def user_api_stats(request: Request):
 
 @router.get("/user/price-list/csv")
 async def user_price_list_csv(request: Request):
-    from middleware.auth import get_current_user
+    from backend.middleware.auth import get_current_user
     user = await get_current_user(request, db)
     user_id = ObjectId(user["_id"])
 
@@ -711,7 +711,7 @@ async def user_price_list_csv(request: Request):
 
 @router.get("/user/price-list/pdf")
 async def user_price_list_pdf(request: Request):
-    from middleware.auth import get_current_user
+    from backend.middleware.auth import get_current_user
     user = await get_current_user(request, db)
     user_id = ObjectId(user["_id"])
 
@@ -793,7 +793,7 @@ async def user_price_list_pdf(request: Request):
 
 @router.get("/user/analytics/overview")
 async def user_analytics_overview(request: Request):
-    from middleware.auth import get_current_user
+    from backend.middleware.auth import get_current_user
     user = await get_current_user(request, db)
     user_id = ObjectId(user["_id"])
     now = datetime.now(timezone.utc)
@@ -846,7 +846,7 @@ async def user_analytics_overview(request: Request):
 
 @router.get("/user/analytics/top-services")
 async def user_analytics_top_services(request: Request):
-    from middleware.auth import get_current_user
+    from backend.middleware.auth import get_current_user
     user = await get_current_user(request, db)
     user_id = ObjectId(user["_id"])
     agg = await db.orders.aggregate([
@@ -862,7 +862,7 @@ async def user_analytics_top_services(request: Request):
 
 @router.get("/user/analytics/spending")
 async def user_analytics_spending(request: Request, period: str = "daily"):
-    from middleware.auth import get_current_user
+    from backend.middleware.auth import get_current_user
     user = await get_current_user(request, db)
     user_id = ObjectId(user["_id"])
     now = datetime.now(timezone.utc)

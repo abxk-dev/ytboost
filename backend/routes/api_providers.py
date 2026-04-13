@@ -76,7 +76,7 @@ def _provider_response(p):
 
 @router.get("/admin/api-providers")
 async def list_providers(request: Request):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     try:
         providers = await db.api_providers.find({}).to_list(1000)
@@ -92,7 +92,7 @@ async def list_providers(request: Request):
 
 @router.post("/admin/api-providers")
 async def create_provider(request: Request, data: ProviderCreate):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
 
     doc = {
@@ -115,7 +115,7 @@ async def create_provider(request: Request, data: ProviderCreate):
 
 @router.put("/admin/api-providers/{provider_id}")
 async def update_provider(request: Request, provider_id: str, data: ProviderUpdate):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
 
     try:
@@ -143,7 +143,7 @@ async def update_provider(request: Request, provider_id: str, data: ProviderUpda
 
 @router.delete("/admin/api-providers/{provider_id}")
 async def delete_provider(request: Request, provider_id: str):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
 
     try:
@@ -164,7 +164,7 @@ async def delete_provider(request: Request, provider_id: str):
 
 @router.post("/admin/api-providers/test")
 async def test_provider(request: Request, data: ProviderTest):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
 
     url = data.apiUrl.rstrip('/')
@@ -186,7 +186,7 @@ async def test_provider(request: Request, data: ProviderTest):
 
 @router.get("/admin/api-providers/{provider_id}/balance")
 async def fetch_balance(request: Request, provider_id: str):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
 
     try:

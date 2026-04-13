@@ -8,7 +8,7 @@ import os
 import shutil
 import uuid
 import httpx
-from middleware.admin import get_request_ip
+from backend.middleware.admin import get_request_ip
 
 router = APIRouter(tags=["Settings"])
 
@@ -99,7 +99,7 @@ async def get_public_settings():
 @router.get("/admin/settings")
 async def admin_get_all_settings(request: Request):
     """Get all site settings (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     return await get_public_settings()
@@ -107,7 +107,7 @@ async def admin_get_all_settings(request: Request):
 @router.put("/admin/settings")
 async def admin_update_settings(request: Request):
     """Update site settings (admin)"""
-    from middleware.admin import get_current_admin, log_admin_action, require_admin_role
+    from backend.middleware.admin import get_current_admin, log_admin_action, require_admin_role
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin"})
     
@@ -124,13 +124,13 @@ async def admin_update_settings(request: Request):
 
 @router.get("/admin/security/my-ip")
 async def admin_my_ip(request: Request):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     return {'ip': get_request_ip(request)}
 
 @router.get("/admin/automation/settings")
 async def admin_get_automation_settings(request: Request):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     keys = [
         'auto_complete_enabled',
@@ -147,7 +147,7 @@ async def admin_get_automation_settings(request: Request):
 
 @router.post("/admin/automation/settings")
 async def admin_set_automation_settings(request: Request):
-    from middleware.admin import get_current_admin, require_admin_role, log_admin_action
+    from backend.middleware.admin import get_current_admin, require_admin_role, log_admin_action
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin"})
     body = await request.json()
@@ -220,7 +220,7 @@ def _day_start(dt: datetime) -> datetime:
 
 @router.get("/admin/stats/today")
 async def admin_stats_today(request: Request):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     now = datetime.now(timezone.utc)
     start = _day_start(now)
@@ -241,7 +241,7 @@ async def admin_stats_today(request: Request):
 
 @router.get("/admin/stats/overview")
 async def admin_stats_overview(request: Request):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     try:
         await _refresh_provider_balances_if_needed()
@@ -303,7 +303,7 @@ async def admin_stats_overview(request: Request):
 
 @router.get("/admin/stats/orders-by-status")
 async def admin_orders_by_status(request: Request):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     agg = await db.orders.aggregate([
         {'$group': {'_id': '$status', 'count': {'$sum': 1}}},
@@ -313,7 +313,7 @@ async def admin_orders_by_status(request: Request):
 
 @router.get("/admin/stats/top-services")
 async def admin_top_services(request: Request):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     agg = await db.orders.aggregate([
         {'$group': {'_id': '$serviceId', 'count': {'$sum': 1}}},
@@ -328,7 +328,7 @@ async def admin_top_services(request: Request):
 
 @router.get("/admin/stats/revenue")
 async def admin_revenue_series(request: Request, period: str = 'daily'):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     now = datetime.now(timezone.utc)
     if period == 'daily':
@@ -376,7 +376,7 @@ async def admin_revenue_series(request: Request, period: str = 'daily'):
 @router.post("/admin/settings/logo")
 async def admin_upload_logo(request: Request, file: UploadFile = File(...)):
     """Upload site logo (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     # Validate file type
@@ -411,7 +411,7 @@ async def admin_upload_logo(request: Request, file: UploadFile = File(...)):
 @router.post("/admin/settings/favicon")
 async def admin_upload_favicon(request: Request, file: UploadFile = File(...)):
     """Upload site favicon (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     # Validate file type
@@ -446,7 +446,7 @@ async def admin_upload_favicon(request: Request, file: UploadFile = File(...)):
 @router.get("/admin/dashboard/stats")
 async def admin_get_dashboard_stats(request: Request):
     """Get dashboard statistics (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     # Total users
@@ -596,7 +596,7 @@ async def get_public_stats():
 @router.get("/dashboard/stats")
 async def get_user_dashboard_stats(request: Request):
     """Get user dashboard statistics"""
-    from middleware.auth import get_current_user
+    from backend.middleware.auth import get_current_user
     
     user = await get_current_user(request, db)
     user_id = ObjectId(user['_id'])

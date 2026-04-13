@@ -37,8 +37,8 @@ def _cookie_settings():
 
 @router.post("/login")
 async def admin_login(req: Request, payload: AdminLoginRequest, response: Response):
-    from middleware.auth import verify_password
-    from middleware.admin import create_admin_access_token, create_admin_refresh_token, get_request_ip, log_admin_action
+    from backend.middleware.auth import verify_password
+    from backend.middleware.admin import create_admin_access_token, create_admin_refresh_token, get_request_ip, log_admin_action
     import pyotp
     
     email = payload.email.lower()
@@ -98,7 +98,7 @@ async def admin_logout(response: Response):
 
 @router.get("/me")
 async def get_admin_me(request: Request):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     
     admin = await get_current_admin(request, db)
     return {
@@ -112,7 +112,7 @@ async def get_admin_me(request: Request):
 
 @router.post("/2fa/setup")
 async def admin_2fa_setup(request: Request):
-    from middleware.admin import get_current_admin, require_admin_role, log_admin_action
+    from backend.middleware.admin import get_current_admin, require_admin_role, log_admin_action
     import pyotp
     import qrcode
     admin = await get_current_admin(request, db)
@@ -129,7 +129,7 @@ async def admin_2fa_setup(request: Request):
 
 @router.post("/2fa/enable")
 async def admin_2fa_enable(request: Request, data: TwoFactorVerifyRequest):
-    from middleware.admin import get_current_admin, log_admin_action
+    from backend.middleware.admin import get_current_admin, log_admin_action
     import pyotp
     admin = await get_current_admin(request, db)
     user = await db.users.find_one({'_id': ObjectId(admin['_id'])})
@@ -145,7 +145,7 @@ async def admin_2fa_enable(request: Request, data: TwoFactorVerifyRequest):
 
 @router.post("/2fa/disable")
 async def admin_2fa_disable(request: Request, data: TwoFactorVerifyRequest):
-    from middleware.admin import get_current_admin, log_admin_action
+    from backend.middleware.admin import get_current_admin, log_admin_action
     import pyotp
     admin = await get_current_admin(request, db)
     user = await db.users.find_one({'_id': ObjectId(admin['_id'])})
@@ -161,7 +161,7 @@ async def admin_2fa_disable(request: Request, data: TwoFactorVerifyRequest):
 
 @router.post("/refresh")
 async def admin_refresh_token(request: Request, response: Response, body: AdminRefreshRequest | None = None):
-    from middleware.admin import verify_admin_refresh_token, create_admin_access_token, create_admin_refresh_token
+    from backend.middleware.admin import verify_admin_refresh_token, create_admin_access_token, create_admin_refresh_token
     
     token = request.cookies.get('admin_refresh_token')
     if not token:

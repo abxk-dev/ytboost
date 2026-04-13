@@ -63,7 +63,7 @@ async def _generate_unique_referral_code() -> str:
 
 @router.post("/register")
 async def register(request: RegisterRequest, response: Response):
-    from middleware.auth import hash_password, create_access_token, create_refresh_token
+    from backend.middleware.auth import hash_password, create_access_token, create_refresh_token
     
     # Validate passwords match
     if request.password != request.confirm_password:
@@ -160,7 +160,7 @@ async def register(request: RegisterRequest, response: Response):
 
 @router.post("/login")
 async def login(request: LoginRequest, response: Response):
-    from middleware.auth import verify_password, create_access_token, create_refresh_token
+    from backend.middleware.auth import verify_password, create_access_token, create_refresh_token
     
     email = request.email.lower()
     user = await db.users.find_one({'email': email})
@@ -214,7 +214,7 @@ async def logout(response: Response):
 
 @router.get("/me")
 async def get_me(request: Request):
-    from middleware.auth import get_current_user
+    from backend.middleware.auth import get_current_user
     
     user = await get_current_user(request, db)
     return {
@@ -230,7 +230,7 @@ async def get_me(request: Request):
 
 @router.post("/refresh")
 async def refresh_token(request: Request, response: Response, body: RefreshRequest | None = None):
-    from middleware.auth import verify_refresh_token, create_access_token, create_refresh_token
+    from backend.middleware.auth import verify_refresh_token, create_access_token, create_refresh_token
     
     token = request.cookies.get('refresh_token')
     if not token:
@@ -259,7 +259,7 @@ async def refresh_token(request: Request, response: Response, body: RefreshReque
 
 @router.post("/change-password")
 async def change_password(request: Request, data: ChangePasswordRequest):
-    from middleware.auth import get_current_user, verify_password, hash_password
+    from backend.middleware.auth import get_current_user, verify_password, hash_password
     
     user = await get_current_user(request, db)
     
@@ -289,7 +289,7 @@ async def change_password(request: Request, data: ChangePasswordRequest):
 
 @router.put("/account")
 async def update_account(request: Request):
-    from middleware.auth import get_current_user
+    from backend.middleware.auth import get_current_user
     
     user = await get_current_user(request, db)
     body = await request.json()
@@ -308,7 +308,7 @@ async def update_account(request: Request):
 
 @router.post("/regenerate-api-key")
 async def regenerate_api_key(request: Request):
-    from middleware.auth import get_current_user
+    from backend.middleware.auth import get_current_user
     
     user = await get_current_user(request, db)
     new_key = str(uuid.uuid4())

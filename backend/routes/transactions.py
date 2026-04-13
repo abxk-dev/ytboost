@@ -18,7 +18,7 @@ def set_db(database):
 @router.get("/transactions")
 async def get_user_transactions(request: Request, page: int = 1, limit: int = 20, type: str = None):
     """Get user's transaction history (authenticated)"""
-    from middleware.auth import get_current_user
+    from backend.middleware.auth import get_current_user
     
     user = await get_current_user(request, db)
     user_id = ObjectId(user['_id'])
@@ -55,7 +55,7 @@ async def get_user_transactions(request: Request, page: int = 1, limit: int = 20
 @router.get("/admin/transactions")
 async def admin_get_transactions(request: Request, page: int = 1, limit: int = 50, userId: str = None, type: str = None):
     """Get all transactions (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     # Build query
@@ -105,7 +105,7 @@ async def admin_finance_transactions(
     from_: str = None,
     to: str = None
 ):
-    from middleware.admin import get_current_admin, require_admin_role
+    from backend.middleware.admin import get_current_admin, require_admin_role
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin", "manager"})
 
@@ -172,7 +172,7 @@ async def admin_finance_transactions_export(
     from_: str = None,
     to: str = None
 ):
-    from middleware.admin import get_current_admin, require_admin_role
+    from backend.middleware.admin import get_current_admin, require_admin_role
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin", "manager"})
 
@@ -230,7 +230,7 @@ async def admin_finance_transactions_export(
 
 @router.get("/admin/finance/revenue")
 async def admin_finance_revenue(request: Request, from_: str = None, to: str = None):
-    from middleware.admin import get_current_admin, require_admin_role
+    from backend.middleware.admin import get_current_admin, require_admin_role
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin", "manager"})
 

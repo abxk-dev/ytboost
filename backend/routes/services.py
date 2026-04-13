@@ -141,7 +141,7 @@ async def get_live_speeds():
 @router.get("/services/user")
 async def get_user_services(request: Request):
     """Get services with user's special rates (authenticated)"""
-    from middleware.auth import get_current_user
+    from backend.middleware.auth import get_current_user
     
     user = await get_current_user(request, db)
     user_id = ObjectId(user['_id'])
@@ -205,7 +205,7 @@ async def get_user_services(request: Request):
 @router.get("/admin/services")
 async def admin_get_services(request: Request):
     """Get all services (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     services = await db.services.find({}).to_list(1000)
@@ -232,7 +232,7 @@ async def admin_get_services(request: Request):
 
 @router.post("/admin/services/seed-defaults")
 async def admin_seed_default_services(request: Request):
-    from middleware.admin import get_current_admin, require_admin_role, log_admin_action
+    from backend.middleware.admin import get_current_admin, require_admin_role, log_admin_action
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin"})
 
@@ -247,7 +247,7 @@ async def admin_seed_default_services(request: Request):
 @router.post("/admin/services")
 async def admin_create_service(request: Request, data: ServiceCreate):
     """Create new service (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     try:
@@ -311,7 +311,7 @@ async def admin_create_service(request: Request, data: ServiceCreate):
 @router.put("/admin/services/{service_id}")
 async def admin_update_service(request: Request, service_id: str, data: ServiceUpdate):
     """Update service (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     try:
@@ -374,7 +374,7 @@ async def admin_update_service(request: Request, service_id: str, data: ServiceU
 @router.delete("/admin/services/{service_id}")
 async def admin_delete_service(request: Request, service_id: str):
     """Delete service (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     try:
@@ -394,7 +394,7 @@ async def admin_delete_service(request: Request, service_id: str):
 @router.patch("/admin/services/{service_id}/status")
 async def admin_toggle_service_status(request: Request, service_id: str):
     """Toggle service status (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     try:
