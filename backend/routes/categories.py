@@ -88,7 +88,7 @@ async def get_categories():
 @router.get("/admin/categories")
 async def admin_get_categories(request: Request):
     """Get all categories with service count (admin)"""
-    from backend.middleware.admin import get_current_admin
+    from middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     await _ensure_category_orders()
@@ -113,7 +113,7 @@ async def admin_get_categories(request: Request):
 @router.post("/admin/categories")
 async def admin_create_category(request: Request, data: CategoryCreate):
     """Create new category (admin)"""
-    from backend.middleware.admin import get_current_admin
+    from middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     slug = data.slug.strip() if data.slug else slugify(data.name)
@@ -146,7 +146,7 @@ async def admin_create_category(request: Request, data: CategoryCreate):
 
 @router.put("/admin/categories/reorder")
 async def admin_reorder_categories(request: Request, data: CategoryReorder):
-    from backend.middleware.admin import get_current_admin
+    from middleware.admin import get_current_admin
     await get_current_admin(request, db)
     if not data.categoryIds:
         raise HTTPException(status_code=400, detail="No categories provided")
@@ -174,7 +174,7 @@ async def admin_reorder_categories(request: Request, data: CategoryReorder):
 @router.put("/admin/categories/{category_id}")
 async def admin_update_category(request: Request, category_id: str, data: CategoryUpdate):
     """Update category (admin)"""
-    from backend.middleware.admin import get_current_admin
+    from middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     try:
@@ -216,7 +216,7 @@ async def admin_update_category(request: Request, category_id: str, data: Catego
 @router.delete("/admin/categories/{category_id}")
 async def admin_delete_category(request: Request, category_id: str, force: bool = False):
     """Delete category (admin)"""
-    from backend.middleware.admin import get_current_admin
+    from middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     try:

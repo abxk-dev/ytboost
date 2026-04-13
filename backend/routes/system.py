@@ -32,7 +32,7 @@ async def admin_activity_log(
     from_: str = None,
     to: str = None
 ):
-    from backend.middleware.admin import get_current_admin, require_admin_role
+    from middleware.admin import get_current_admin, require_admin_role
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin"})
 
@@ -111,7 +111,7 @@ async def admin_activity_log_export(request: Request, adminId: str = None, actio
 
 @router.get("/admin/admins")
 async def admin_list_admins(request: Request):
-    from backend.middleware.admin import get_current_admin, require_admin_role
+    from middleware.admin import get_current_admin, require_admin_role
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin"})
 
@@ -130,8 +130,8 @@ async def admin_list_admins(request: Request):
 
 @router.post("/admin/admins")
 async def admin_create_admin(request: Request, data: AdminCreateRequest):
-    from backend.middleware.admin import get_current_admin, require_admin_role, log_admin_action
-    from backend.middleware.auth import hash_password
+    from middleware.admin import get_current_admin, require_admin_role, log_admin_action
+    from middleware.auth import hash_password
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin"})
 
@@ -160,7 +160,7 @@ async def admin_create_admin(request: Request, data: AdminCreateRequest):
 
 @router.put("/admin/admins/{admin_id}")
 async def admin_update_admin(request: Request, admin_id: str, data: AdminUpdateRequest):
-    from backend.middleware.admin import get_current_admin, require_admin_role, log_admin_action
+    from middleware.admin import get_current_admin, require_admin_role, log_admin_action
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin"})
     try:

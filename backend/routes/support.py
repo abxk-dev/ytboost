@@ -47,7 +47,7 @@ def _ticket_to_dict(t):
 
 @router.get("/user/support/tickets")
 async def user_list_tickets(request: Request):
-    from backend.middleware.auth import get_current_user
+    from middleware.auth import get_current_user
     user = await get_current_user(request, db)
     user_id = ObjectId(user['_id'])
     tickets = await db.support_tickets.find({'userId': user_id}).sort('updatedAt', -1).to_list(200)
@@ -55,7 +55,7 @@ async def user_list_tickets(request: Request):
 
 @router.post("/user/support/tickets")
 async def user_create_ticket(request: Request, data: CreateTicketRequest):
-    from backend.middleware.auth import get_current_user
+    from middleware.auth import get_current_user
     user = await get_current_user(request, db)
     user_id = ObjectId(user['_id'])
     now = datetime.now(timezone.utc)
@@ -85,7 +85,7 @@ async def user_create_ticket(request: Request, data: CreateTicketRequest):
 
 @router.get("/user/support/tickets/{ticket_id}")
 async def user_get_ticket(request: Request, ticket_id: str):
-    from backend.middleware.auth import get_current_user
+    from middleware.auth import get_current_user
     user = await get_current_user(request, db)
     user_id = ObjectId(user['_id'])
     try:
@@ -101,7 +101,7 @@ async def user_get_ticket(request: Request, ticket_id: str):
 
 @router.post("/user/support/tickets/{ticket_id}/reply")
 async def user_reply_ticket(request: Request, ticket_id: str, data: ReplyTicketRequest):
-    from backend.middleware.auth import get_current_user
+    from middleware.auth import get_current_user
     user = await get_current_user(request, db)
     user_id = ObjectId(user['_id'])
     try:
@@ -121,7 +121,7 @@ async def user_reply_ticket(request: Request, ticket_id: str, data: ReplyTicketR
 
 @router.get("/admin/support/tickets")
 async def admin_list_tickets(request: Request, status: str = None, category: str = None):
-    from backend.middleware.admin import get_current_admin, require_admin_role
+    from middleware.admin import get_current_admin, require_admin_role
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin", "manager", "support"})
     query = {}
@@ -155,7 +155,7 @@ async def admin_list_tickets(request: Request, status: str = None, category: str
 
 @router.get("/admin/support/tickets/{ticket_id}")
 async def admin_get_ticket(request: Request, ticket_id: str):
-    from backend.middleware.admin import get_current_admin, require_admin_role
+    from middleware.admin import get_current_admin, require_admin_role
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin", "manager", "support"})
     try:
@@ -171,7 +171,7 @@ async def admin_get_ticket(request: Request, ticket_id: str):
 
 @router.post("/admin/support/tickets/{ticket_id}/reply")
 async def admin_reply_ticket(request: Request, ticket_id: str, data: ReplyTicketRequest):
-    from backend.middleware.admin import get_current_admin, require_admin_role, log_admin_action
+    from middleware.admin import get_current_admin, require_admin_role, log_admin_action
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin", "manager", "support"})
     try:
@@ -193,7 +193,7 @@ async def admin_reply_ticket(request: Request, ticket_id: str, data: ReplyTicket
 
 @router.put("/admin/support/tickets/{ticket_id}/status")
 async def admin_update_ticket_status(request: Request, ticket_id: str, data: UpdateTicketStatusRequest):
-    from backend.middleware.admin import get_current_admin, require_admin_role, log_admin_action
+    from middleware.admin import get_current_admin, require_admin_role, log_admin_action
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin", "manager", "support"})
     try:

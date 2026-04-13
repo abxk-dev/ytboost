@@ -19,8 +19,8 @@ class EmailBlastRequest(BaseModel):
 
 @router.post("/admin/communications/email-blast")
 async def admin_email_blast(request: Request, data: EmailBlastRequest):
-    from backend.middleware.admin import get_current_admin, require_admin_role, log_admin_action
-    from backend.services.email_service import send_email
+    from middleware.admin import get_current_admin, require_admin_role, log_admin_action
+    from services.email_service import send_email
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin"})
 

@@ -7,8 +7,8 @@ from datetime import datetime, timezone, timedelta
 import os
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-from backend.services.bep20_monitor import check_bep20_payment
-from backend.services.webhook_processor import credit_payment
+from services.bep20_monitor import check_bep20_payment
+from services.webhook_processor import credit_payment
 
 scheduler = None
 db_instance = None

@@ -50,7 +50,7 @@ def validate_youtube_url(url: str) -> bool:
 @router.post("/orders")
 async def create_order(request: Request, data: OrderCreate):
     """Create new order (authenticated user)"""
-    from backend.middleware.auth import get_current_user
+    from middleware.auth import get_current_user
     
     user = await get_current_user(request, db)
     user_id = ObjectId(user['_id'])
@@ -208,7 +208,7 @@ async def create_order(request: Request, data: OrderCreate):
 @router.get("/orders")
 async def get_user_orders(request: Request, page: int = 1, limit: int = 20, status: str = None, search: str = None):
     """Get user's orders (authenticated)"""
-    from backend.middleware.auth import get_current_user
+    from middleware.auth import get_current_user
     
     user = await get_current_user(request, db)
     user_id = ObjectId(user['_id'])
@@ -264,7 +264,7 @@ async def get_user_orders(request: Request, page: int = 1, limit: int = 20, stat
 @router.post("/orders/{order_id}/refill")
 async def request_refill(request: Request, order_id: str):
     """Request a refill for a completed order"""
-    from backend.middleware.auth import get_current_user
+    from middleware.auth import get_current_user
     
     user = await get_current_user(request, db)
     user_id = ObjectId(user['_id'])
@@ -302,7 +302,7 @@ async def request_refill(request: Request, order_id: str):
 @router.get("/orders/{order_id}")
 async def get_order(request: Request, order_id: str):
     """Get single order details (authenticated)"""
-    from backend.middleware.auth import get_current_user
+    from middleware.auth import get_current_user
     
     user = await get_current_user(request, db)
     
@@ -334,7 +334,7 @@ async def get_order(request: Request, order_id: str):
 @router.get("/admin/orders")
 async def admin_get_orders(request: Request, page: int = 1, limit: int = 50, status: str = None, userId: str = None, search: str = None):
     """Get all orders (admin)"""
-    from backend.middleware.admin import get_current_admin
+    from middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     # Build query
@@ -422,7 +422,7 @@ async def admin_get_orders(request: Request, page: int = 1, limit: int = 50, sta
 @router.put("/admin/orders/{order_id}/status")
 async def admin_update_order_status(request: Request, order_id: str, data: OrderStatusUpdate):
     """Update order status (admin)"""
-    from backend.middleware.admin import get_current_admin, log_admin_action, require_admin_role
+    from middleware.admin import get_current_admin, log_admin_action, require_admin_role
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin", "manager", "support"})
     
@@ -447,7 +447,7 @@ async def admin_update_order_status(request: Request, order_id: str, data: Order
 
 @router.post("/admin/orders/bulk-action")
 async def admin_bulk_order_action(request: Request, data: BulkOrderAction):
-    from backend.middleware.admin import get_current_admin, log_admin_action, require_admin_role
+    from middleware.admin import get_current_admin, log_admin_action, require_admin_role
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin", "manager"})
     if not data.orderIds:
@@ -538,7 +538,7 @@ async def admin_bulk_order_action(request: Request, data: BulkOrderAction):
 
 @router.put("/admin/orders/{order_id}/note")
 async def admin_update_order_note(request: Request, order_id: str, data: OrderNoteUpdate):
-    from backend.middleware.admin import get_current_admin, log_admin_action, require_admin_role
+    from middleware.admin import get_current_admin, log_admin_action, require_admin_role
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin", "manager", "support"})
     try:
@@ -554,7 +554,7 @@ async def admin_update_order_note(request: Request, order_id: str, data: OrderNo
 
 @router.post("/admin/orders/{order_id}/cancel-refund")
 async def admin_cancel_refund(request: Request, order_id: str):
-    from backend.middleware.admin import get_current_admin, log_admin_action, require_admin_role
+    from middleware.admin import get_current_admin, log_admin_action, require_admin_role
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin", "manager"})
     try:
@@ -604,7 +604,7 @@ async def admin_cancel_refund(request: Request, order_id: str):
 
 @router.get("/admin/orders/export")
 async def admin_export_orders(request: Request, status: str = None):
-    from backend.middleware.admin import get_current_admin
+    from middleware.admin import get_current_admin
     await get_current_admin(request, db)
     query = {}
     if status:
@@ -648,7 +648,7 @@ async def admin_export_orders(request: Request, status: str = None):
 
 @router.get("/admin/finance/refunds")
 async def admin_finance_refunds(request: Request, page: int = 1, limit: int = 50, from_: str = None, to: str = None):
-    from backend.middleware.admin import get_current_admin, require_admin_role
+    from middleware.admin import get_current_admin, require_admin_role
     admin = await get_current_admin(request, db)
     require_admin_role(admin, {"superadmin", "manager"})
 
