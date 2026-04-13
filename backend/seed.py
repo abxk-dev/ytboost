@@ -3,7 +3,7 @@ Database Seed Script
 Seeds initial data for YTBoost.io
 """
 from datetime import datetime, timezone
-from middleware.auth import hash_password
+from backend.middleware.auth import hash_password
 import uuid
 
 async def seed_database(db):
