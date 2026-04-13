@@ -45,10 +45,9 @@ client = AsyncIOMotorClient(mongo_url, **mongo_client_kwargs)
 db = client[db_name]
 
 # CORS
-origins = [
-    "http://localhost:3000",
-    "http://localhost:5173",
-]
+import os as _os
+_cors_env = _os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173")
+origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
 
 # Socket.io
 sio = socketio.AsyncServer(
