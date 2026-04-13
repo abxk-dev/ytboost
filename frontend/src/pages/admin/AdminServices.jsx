@@ -318,7 +318,7 @@ export default function AdminServices() {
                     <th className={`text-left py-3 px-4 text-xs font-semibold ${c.textMuted} uppercase w-[44px]`}>
                       <Checkbox checked={headerCheckboxState} onCheckedChange={toggleSelectAllVisible} aria-label="Select visible services" />
                     </th>
-                    {['Name','Category','Rate/1k','Min','Max','Type','Status','Actions'].map(h => (
+                    {['ID','Name','Category','Rate/1k','Min','Max','Type','Status','Actions'].map(h => (
                       <th key={h} className={`text-left py-3 px-4 text-xs font-semibold ${c.textMuted} uppercase`}>{h}</th>
                     ))}
                   </tr>
@@ -328,6 +328,9 @@ export default function AdminServices() {
                     <tr key={svc.id} className={`border-b ${c.border} last:border-0 ${c.cardHover}`}>
                       <td className="py-4 px-4">
                         <Checkbox checked={selectedIds.has(svc.id)} onCheckedChange={(v) => toggleSelectOne(svc.id, v)} aria-label={`Select service ${svc.name}`} />
+                      </td>
+                      <td className={`py-4 px-4 text-sm font-mono font-bold ${c.textSecondary}`}>
+                        <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs">{svc.sid || '—'}</span>
                       </td>
                       <td className={`py-4 px-4 text-sm font-medium ${c.text} max-w-[200px] truncate`}>{svc.name}</td>
                       <td className={`py-4 px-4 text-sm ${c.textSecondary}`}>{svc.categoryName}</td>

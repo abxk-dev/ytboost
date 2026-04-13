@@ -262,6 +262,7 @@ export default function AddOrder() {
                             </span>
                           )}
                           {TYPE_ICONS[svc.type] && <span>{TYPE_ICONS[svc.type]}</span>}
+                          {svc.sid && <span className="text-xs font-mono bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded shrink-0">#{svc.sid}</span>}
                           <span className="truncate">{svc.name}</span>
                         </span>
                         <span className="flex items-center gap-2 shrink-0">
