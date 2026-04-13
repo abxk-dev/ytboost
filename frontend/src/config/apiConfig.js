@@ -3,7 +3,7 @@ function normalizeUrl(url) {
   return v.endsWith('/') ? v.slice(0, -1) : v;
 }
 
-const DEFAULT_API_BASE_URL = 'https://ytboost-production.up.railway.app/api';
+const DEFAULT_API_BASE_URL = 'https://ytboost-production-801e.up.railway.app/api';
 
 export const DEBUG_API = import.meta.env.VITE_DEBUG_API === 'true';
 
