@@ -8,6 +8,7 @@ import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { Badge } from '../../components/ui/badge';
 import { Switch } from '../../components/ui/switch';
+import { Checkbox } from '../../components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog';
 import { Loader2, Plus, Pencil, Trash2, Package, Search } from 'lucide-react';
@@ -44,7 +45,8 @@ const INITIAL_FORM = {
   name: '', categoryId: '', description: '', rate: '', minQty: '', maxQty: '',
   type: 'Default', status: true, startTime: '', speed: '', refillTime: '',
   quality: '', country: '', refillEnabled: false, packagePrice: '', packageDescription: '',
-  fulfillmentType: 'manual', providerId: '', providerServiceId: ''
+  fulfillmentType: 'manual', providerId: '', providerServiceId: '',
+  displaySpeedMin: '', displaySpeedMax: '', displaySpeedUnit: ''
 };
 
 export default function AdminServices() {
@@ -54,31 +56,60 @@ export default function AdminServices() {
   const [categories, setCategories] = useState([]);
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkAction, setBulkAction] = useState('');
+  const [bulkWorking, setBulkWorking] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [submitting, setSubmitting] = useState(false);
   const [formData, setFormData] = useState(INITIAL_FORM);
+  const [loadError, setLoadError] = useState('');
+  const [seeding, setSeeding] = useState(false);
 
   const fetchData = async () => {
     try {
-      const [svcRes, catRes, provRes] = await Promise.all([
+      setLoadError('');
+      const [svcRes, catRes, provRes] = await Promise.allSettled([
         api.get('/admin/services'),
         api.get('/admin/categories'),
-        api.get('/admin/api-providers')
+        api.get('/admin/api-providers'),
       ]);
-      setServices(svcRes.data);
-      setCategories(catRes.data);
-      setProviders(provRes.data);
+
+      if (svcRes.status === 'fulfilled') setServices(svcRes.value.data || []);
+      else throw svcRes.reason;
+
+      if (catRes.status === 'fulfilled') setCategories(catRes.value.data || []);
+      else throw catRes.reason;
+
+      if (provRes.status === 'fulfilled') setProviders(provRes.value.data || []);
+      else setProviders([]);
+      setSelectedIds(new Set());
     } catch (error) {
-      console.error('Failed to fetch data:', error);
+      const msg = formatApiError(error);
+      setLoadError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => { fetchData(); }, []);
+
+  const seedDefaults = async () => {
+    setSeeding(true);
+    try {
+      const { data } = await api.post('/admin/services/seed-defaults');
+      toast.success(`Seeded: ${Number(data.services || 0).toLocaleString()} services`);
+      setLoading(true);
+      await fetchData();
+    } catch (error) {
+      toast.error(formatApiError(error));
+    } finally {
+      setSeeding(false);
+    }
+  };
 
   const filteredServices = services.filter(svc => {
     const matchesSearch = svc.name.toLowerCase().includes(search.toLowerCase());
@@ -100,7 +131,10 @@ export default function AdminServices() {
         packageDescription: service.packageDescription || '',
         fulfillmentType: service.fulfillmentType || 'manual',
         providerId: service.providerId || '',
-        providerServiceId: service.providerServiceId || ''
+        providerServiceId: service.providerServiceId || '',
+        displaySpeedMin: service.displaySpeedMin != null ? String(service.displaySpeedMin) : '',
+        displaySpeedMax: service.displaySpeedMax != null ? String(service.displaySpeedMax) : '',
+        displaySpeedUnit: service.displaySpeedUnit || ''
       });
     } else {
       setEditing(null);
@@ -120,6 +154,9 @@ export default function AdminServices() {
       packagePrice: formData.packagePrice ? parseFloat(formData.packagePrice) : null,
       providerId: formData.fulfillmentType === 'auto' ? formData.providerId : null,
       providerServiceId: formData.fulfillmentType === 'auto' ? formData.providerServiceId : '',
+      displaySpeedMin: formData.displaySpeedMin ? parseInt(formData.displaySpeedMin) : null,
+      displaySpeedMax: formData.displaySpeedMax ? parseInt(formData.displaySpeedMax) : null,
+      displaySpeedUnit: formData.displaySpeedUnit || '',
     };
     try {
       if (editing) {
@@ -154,6 +191,65 @@ export default function AdminServices() {
     } catch (error) { toast.error(formatApiError(error)); }
   };
 
+  const selectedCount = selectedIds.size;
+  const visibleIds = filteredServices.map((s) => s.id);
+  const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const someSelected = visibleIds.some((id) => selectedIds.has(id)) && !allSelected;
+  const headerCheckboxState = allSelected ? true : someSelected ? 'indeterminate' : false;
+
+  const toggleSelectAllVisible = (val) => {
+    const checked = val === true;
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) visibleIds.forEach((id) => next.add(id));
+      else visibleIds.forEach((id) => next.delete(id));
+      return next;
+    });
+  };
+
+  const toggleSelectOne = (id, val) => {
+    const checked = val === true;
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const applyBulkAction = async () => {
+    if (!bulkAction || selectedIds.size === 0) return;
+    setBulkWorking(true);
+    try {
+      const ids = Array.from(selectedIds);
+      if (bulkAction === 'activate' || bulkAction === 'deactivate') {
+        const statusValue = bulkAction === 'activate';
+        const results = await Promise.allSettled(
+          ids.map((id) => api.put(`/admin/services/${id}`, { status: statusValue }))
+        );
+        const ok = results.filter((r) => r.status === 'fulfilled').length;
+        const failed = results.length - ok;
+        if (ok > 0) toast.success(`Updated ${ok} service${ok === 1 ? '' : 's'}`);
+        if (failed > 0) toast.error(`Failed to update ${failed} service${failed === 1 ? '' : 's'}`);
+      } else if (bulkAction === 'delete') {
+        const results = await Promise.allSettled(ids.map((id) => api.delete(`/admin/services/${id}`)));
+        const ok = results.filter((r) => r.status === 'fulfilled').length;
+        const failed = results.length - ok;
+        if (ok > 0) toast.success(`Deleted ${ok} service${ok === 1 ? '' : 's'}`);
+        if (failed > 0) toast.error(`Failed to delete ${failed} service${failed === 1 ? '' : 's'}`);
+      }
+      setBulkAction('');
+      clearSelection();
+      await fetchData();
+    } catch (error) {
+      toast.error(formatApiError(error));
+    } finally {
+      setBulkWorking(false);
+    }
+  };
+
   const set = (key, val) => setFormData(prev => ({ ...prev, [key]: val }));
   const typeBadges = theme === 'dark' ? TYPE_BADGES : TYPE_BADGES_LIGHT;
 
@@ -161,10 +257,40 @@ export default function AdminServices() {
     <div className="space-y-6" data-testid="admin-services">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h1 className={`text-2xl font-bold ${c.text}`}>Services</h1>
-        <Button onClick={() => openDialog()} className="bg-[#7c3aed] hover:bg-[#8b5cf6] text-white rounded-[8px]" data-testid="add-service-btn">
-          <Plus className="w-4 h-4 mr-2" />Add Service
-        </Button>
+        <div className="flex items-center gap-3">
+          {selectedCount > 0 && (
+            <div className="flex items-center gap-2">
+              <span className={`text-sm ${c.textSecondary}`}>{selectedCount} selected</span>
+              <Select value={bulkAction} onValueChange={setBulkAction}>
+                <SelectTrigger className={`w-[170px] ${c.input}`}><SelectValue placeholder="Bulk actions" /></SelectTrigger>
+                <SelectContent className={c.selectContent}>
+                  <SelectItem value="activate">Activate</SelectItem>
+                  <SelectItem value="deactivate">Deactivate</SelectItem>
+                  <SelectItem value="delete">Delete</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button onClick={applyBulkAction} disabled={bulkWorking || !bulkAction} className="bg-[#7c3aed] hover:bg-[#8b5cf6] text-white rounded-[8px]">
+                {bulkWorking ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
+              </Button>
+              <Button variant="outline" onClick={clearSelection} disabled={bulkWorking} className={`${c.border} ${c.textSecondary}`}>
+                Clear
+              </Button>
+            </div>
+          )}
+          <Button onClick={() => openDialog()} className="bg-[#7c3aed] hover:bg-[#8b5cf6] text-white rounded-[8px]" data-testid="add-service-btn">
+            <Plus className="w-4 h-4 mr-2" />Add Service
+          </Button>
+        </div>
       </div>
+
+      {loadError && (
+        <div className={`rounded-[12px] border px-4 py-3 flex items-center justify-between gap-3 ${theme === 'dark' ? 'bg-red-500/10 border-red-500/30 text-red-200' : 'bg-red-50 border-red-200 text-red-800'}`}>
+          <div className="text-sm font-medium">{loadError}</div>
+          <Button variant="outline" onClick={() => { setLoading(true); fetchData(); }} className={`${c.border} ${c.textSecondary}`}>
+            Retry
+          </Button>
+        </div>
+      )}
 
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
@@ -189,6 +315,9 @@ export default function AdminServices() {
               <table className="w-full">
                 <thead>
                   <tr className={`border-b ${c.border}`}>
+                    <th className={`text-left py-3 px-4 text-xs font-semibold ${c.textMuted} uppercase w-[44px]`}>
+                      <Checkbox checked={headerCheckboxState} onCheckedChange={toggleSelectAllVisible} aria-label="Select visible services" />
+                    </th>
                     {['Name','Category','Rate/1k','Min','Max','Type','Status','Actions'].map(h => (
                       <th key={h} className={`text-left py-3 px-4 text-xs font-semibold ${c.textMuted} uppercase`}>{h}</th>
                     ))}
@@ -197,6 +326,9 @@ export default function AdminServices() {
                 <tbody>
                   {filteredServices.map(svc => (
                     <tr key={svc.id} className={`border-b ${c.border} last:border-0 ${c.cardHover}`}>
+                      <td className="py-4 px-4">
+                        <Checkbox checked={selectedIds.has(svc.id)} onCheckedChange={(v) => toggleSelectOne(svc.id, v)} aria-label={`Select service ${svc.name}`} />
+                      </td>
                       <td className={`py-4 px-4 text-sm font-medium ${c.text} max-w-[200px] truncate`}>{svc.name}</td>
                       <td className={`py-4 px-4 text-sm ${c.textSecondary}`}>{svc.categoryName}</td>
                       <td className={`py-4 px-4 text-sm ${c.text}`}>${svc.rate.toFixed(2)}</td>
@@ -220,7 +352,18 @@ export default function AdminServices() {
               </table>
             </div>
           ) : (
-            <div className={`py-12 text-center ${c.textMuted}`}><Package className="w-12 h-12 mx-auto mb-3 opacity-50" /><p>No services found</p></div>
+            <div className={`py-12 text-center ${c.textMuted}`}>
+              <Package className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No services found</p>
+              <div className="mt-4 flex items-center justify-center gap-2">
+                <Button variant="outline" onClick={() => { setLoading(true); fetchData(); }} className={`${c.border} ${c.textSecondary}`} disabled={seeding}>
+                  Refresh
+                </Button>
+                <Button onClick={seedDefaults} disabled={seeding} className="bg-[#7c3aed] hover:bg-[#8b5cf6] text-white rounded-[8px]">
+                  {seeding ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Seed Default Services'}
+                </Button>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -299,6 +442,20 @@ export default function AdminServices() {
                 <div className="space-y-2">
                   <Label>Speed (e.g. "1000/day")</Label>
                   <Input value={formData.speed} onChange={(e) => set('speed', e.target.value)} className={c.input} data-testid="svc-speed" placeholder="1000/day" />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Live Speed Min</Label>
+                  <Input type="number" value={formData.displaySpeedMin} onChange={(e) => set('displaySpeedMin', e.target.value)} className={c.input} placeholder="e.g. 1200" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Live Speed Max</Label>
+                  <Input type="number" value={formData.displaySpeedMax} onChange={(e) => set('displaySpeedMax', e.target.value)} className={c.input} placeholder="e.g. 2400" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Live Speed Unit</Label>
+                  <Input value={formData.displaySpeedUnit} onChange={(e) => set('displaySpeedUnit', e.target.value)} className={c.input} placeholder="views/hour" />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">

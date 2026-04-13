@@ -3,11 +3,12 @@ Blockchain Scheduler Service
 Background job that polls BSC every 30 seconds for pending payments
 """
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+import os
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
-from services.bep20_monitor import check_bep20_payment
-from services.webhook_processor import credit_payment
+from backend.services.bep20_monitor import check_bep20_payment
+from backend.services.webhook_processor import credit_payment
 
 scheduler = None
 db_instance = None
@@ -23,11 +24,19 @@ async def check_pending_sessions():
     
     try:
         # Get all pending/detecting sessions that are not expired
+        grace_raw = os.environ.get("PAYMENT_SESSION_GRACE_MINUTES", "360")
+        try:
+            grace_minutes = int(float(grace_raw))
+        except Exception:
+            grace_minutes = 360
+        grace_minutes = max(0, min(7 * 24 * 60, grace_minutes))
+
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=grace_minutes)
         sessions = await db_instance.crypto_payment_sessions.find({
             'status': {'$in': ['pending', 'detecting']},
-            'expiresAt': {'$gt': datetime.now(timezone.utc)},
+            'expiresAt': {'$gt': cutoff},
             'network': 'BEP20'
-        }).to_list(100)
+        }).to_list(200)
         
         if not sessions:
             return
@@ -67,10 +76,18 @@ async def expire_old_sessions():
         return
     
     try:
+        grace_raw = os.environ.get("PAYMENT_SESSION_GRACE_MINUTES", "360")
+        try:
+            grace_minutes = int(float(grace_raw))
+        except Exception:
+            grace_minutes = 360
+        grace_minutes = max(0, min(7 * 24 * 60, grace_minutes))
+
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=grace_minutes)
         result = await db_instance.crypto_payment_sessions.update_many(
             {
-                'status': 'pending',
-                'expiresAt': {'$lt': datetime.now(timezone.utc)}
+                'status': {'$in': ['pending', 'detecting']},
+                'expiresAt': {'$lt': cutoff}
             },
             {'$set': {'status': 'expired'}}
         )
@@ -87,8 +104,9 @@ STATUS_MAP = {
     'Processing': 'Processing',
     'Completed': 'Completed',
     'Partial': 'Partial',
-    'Canceled': 'Cancelled',
-    'Cancelled': 'Cancelled',
+    'Canceled': 'Failed',
+    'Cancelled': 'Failed',
+    'Canceled (refunded)': 'Failed',
 }
 
 async def check_provider_orders():
@@ -157,6 +175,76 @@ async def check_provider_orders():
     except Exception as e:
         print(f"Provider order check error: {e}")
 
+async def check_provider_health():
+    global db_instance
+    if db_instance is None:
+        return
+    try:
+        import httpx
+        providers = await db_instance.api_providers.find({'status': True}).to_list(200)
+        if not providers:
+            return
+        now = datetime.now(timezone.utc)
+        async with httpx.AsyncClient(timeout=10) as client:
+            for p in providers:
+                try:
+                    resp = await client.post(p['apiUrl'], data={'key': p['apiKey'], 'action': 'balance'})
+                    result = resp.json()
+                    if 'balance' in result:
+                        balance = float(result['balance'])
+                        await db_instance.api_providers.update_one(
+                            {'_id': p['_id']},
+                            {'$set': {'lastBalance': balance, 'lastTestedAt': now, 'lastTestOk': True}}
+                        )
+                    else:
+                        await db_instance.api_providers.update_one(
+                            {'_id': p['_id']},
+                            {'$set': {'lastTestedAt': now, 'lastTestOk': False}}
+                        )
+                except Exception:
+                    await db_instance.api_providers.update_one(
+                        {'_id': p['_id']},
+                        {'$set': {'lastTestedAt': now, 'lastTestOk': False}}
+                    )
+    except Exception as e:
+        print(f"Provider health check error: {e}")
+
+async def auto_complete_old_orders():
+    global db_instance
+    if db_instance is None:
+        return
+    try:
+        enabled = await db_instance.site_settings.find_one({'key': 'auto_complete_enabled'})
+        hours_setting = await db_instance.site_settings.find_one({'key': 'auto_complete_hours'})
+        if not enabled or enabled.get('value') != 'true':
+            return
+        try:
+            hours = float(hours_setting.get('value', '72')) if hours_setting else 72
+        except Exception:
+            hours = 72
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+        orders = await db_instance.orders.find({'status': 'Processing', 'createdAt': {'$lt': cutoff}}).to_list(500)
+        if not orders:
+            return
+        for o in orders:
+            await db_instance.orders.update_one({'_id': o['_id']}, {'$set': {'status': 'Completed'}})
+            await db_instance.notifications.insert_one({
+                'userId': o['userId'],
+                'title': 'Order completed',
+                'message': 'Your order was automatically marked as completed.',
+                'type': 'success',
+                'read': False,
+                'createdAt': datetime.now(timezone.utc)
+            })
+            await db_instance.user_activity_logs.insert_one({
+                'userId': o['userId'],
+                'action': 'Order Completed',
+                'details': f'Order {str(o["_id"])} auto-completed',
+                'createdAt': datetime.now(timezone.utc)
+            })
+    except Exception as e:
+        print(f"Auto completion error: {e}")
+
 def start_blockchain_scheduler(db, socket_manager=None):
     """Start the blockchain monitoring scheduler"""
     global scheduler, db_instance, socket_manager_instance
@@ -187,6 +275,22 @@ def start_blockchain_scheduler(db, socket_manager=None):
         check_provider_orders,
         IntervalTrigger(minutes=5),
         id='check_provider_orders',
+        replace_existing=True
+    )
+
+    # Check provider health every 15 minutes
+    scheduler.add_job(
+        check_provider_health,
+        IntervalTrigger(minutes=15),
+        id='check_provider_health',
+        replace_existing=True
+    )
+
+    # Auto-complete orders every hour
+    scheduler.add_job(
+        auto_complete_old_orders,
+        IntervalTrigger(hours=1),
+        id='auto_complete_orders',
         replace_existing=True
     )
     

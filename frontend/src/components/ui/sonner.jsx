@@ -9,7 +9,8 @@ const Toaster = ({
   return (
     <Sonner
       theme={theme}
-      className="toaster group"
+      className="toaster group z-[99999]"
+      offset={80}
       toastOptions={{
         classNames: {
           toast:

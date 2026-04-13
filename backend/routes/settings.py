@@ -2,11 +2,13 @@
 Settings Routes - Site settings management
 """
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 import os
 import shutil
 import uuid
+import httpx
+from backend.middleware.admin import get_request_ip
 
 router = APIRouter(tags=["Settings"])
 
@@ -26,13 +28,6 @@ def set_db(database):
 @router.get("/settings")
 async def get_public_settings():
     """Get public site settings"""
-    settings = await db.site_settings.find({}).to_list(100)
-    
-    result = {}
-    for s in settings:
-        result[s['key']] = s['value']
-    
-    # Default values if not set
     defaults = {
         'site_name': 'YTBoost.io',
         'tagline': 'The #1 YouTube Growth Panel',
@@ -44,8 +39,55 @@ async def get_public_settings():
         'footer_text': '© 2026 YTBoost.io. All rights reserved.',
         'support_email': '',
         'telegram_link': '',
-        'whatsapp_link': ''
+        'whatsapp_link': '',
+        'whatsapp_enabled': 'false',
+        'whatsapp_number': '',
+        'announcement_enabled': 'false',
+        'announcement_message': '',
+        'announcement_type': 'info',
+        'seo_meta_title': 'YTBoost.io',
+        'seo_meta_description': '',
+        'seo_meta_keywords': '',
+        'google_analytics_id': '',
+        'facebook_pixel_id': '',
+        'ip_whitelist_enabled': 'false',
+        'ip_whitelist_ips': '',
+        'auto_complete_enabled': 'false',
+        'auto_complete_hours': '72',
+        'referral_enabled': 'false',
+        'referral_commission_pct': '5',
+        'referral_min_deposit': '0',
+        'public_fake_stats_enabled': 'false',
+        'public_fake_orders_base': '0',
+        'public_fake_users_base': '0',
+        'public_fake_orders_inc_per_hour': '0',
+        'public_fake_users_inc_per_hour': '0',
+        'public_fake_stats_start': '',
+        'public_starting_price': '0.002',
+        'bscscan_api_key': 'H7XZARZKDI393CFJBEKFBI9NYH8UJCC1NK',
+        'panel_bep20_wallet': '0x981909a9f8a06a7886bc35b393a66da4f4d30622'
     }
+    
+    # Force update DB if wrong
+    await db.site_settings.update_one(
+        {'key': 'panel_bep20_wallet'},
+        {'$set': {'value': '0x981909a9f8a06a7886bc35b393a66da4f4d30622'}},
+        upsert=True
+    )
+
+    # Force update crypto payment methods to use the fixed wallet
+    await db.crypto_payment_methods.update_many(
+        {'network': 'BEP20'},
+        {'$set': {'address': '0x981909a9f8a06a7886bc35b393a66da4f4d30622'}}
+    )
+
+    result = {}
+    try:
+        settings = await db.site_settings.find({}).to_list(1000)
+        for s in settings:
+            result[s['key']] = s.get('value', '')
+    except Exception:
+        result = {}
     
     for key, default_value in defaults.items():
         if key not in result:
@@ -57,7 +99,7 @@ async def get_public_settings():
 @router.get("/admin/settings")
 async def admin_get_all_settings(request: Request):
     """Get all site settings (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     return await get_public_settings()
@@ -65,8 +107,9 @@ async def admin_get_all_settings(request: Request):
 @router.put("/admin/settings")
 async def admin_update_settings(request: Request):
     """Update site settings (admin)"""
-    from middleware.admin import get_current_admin
-    await get_current_admin(request, db)
+    from backend.middleware.admin import get_current_admin, log_admin_action, require_admin_role
+    admin = await get_current_admin(request, db)
+    require_admin_role(admin, {"superadmin"})
     
     body = await request.json()
     
@@ -76,13 +119,264 @@ async def admin_update_settings(request: Request):
             {'$set': {'value': str(value), 'updatedAt': datetime.now(timezone.utc)}},
             upsert=True
         )
-    
+    await log_admin_action(db, request, admin, "SETTINGS_UPDATED", f"Keys: {', '.join(body.keys())}")
     return {'message': 'Settings updated'}
+
+@router.get("/admin/security/my-ip")
+async def admin_my_ip(request: Request):
+    from backend.middleware.admin import get_current_admin
+    await get_current_admin(request, db)
+    return {'ip': get_request_ip(request)}
+
+@router.get("/admin/automation/settings")
+async def admin_get_automation_settings(request: Request):
+    from backend.middleware.admin import get_current_admin
+    await get_current_admin(request, db)
+    keys = [
+        'auto_complete_enabled',
+        'auto_complete_hours',
+        'referral_enabled',
+        'referral_commission_pct',
+        'referral_min_deposit'
+    ]
+    docs = await db.site_settings.find({'key': {'$in': keys}}).to_list(len(keys))
+    result = {d['key']: d.get('value', '') for d in docs}
+    for k in keys:
+        result.setdefault(k, '')
+    return result
+
+@router.post("/admin/automation/settings")
+async def admin_set_automation_settings(request: Request):
+    from backend.middleware.admin import get_current_admin, require_admin_role, log_admin_action
+    admin = await get_current_admin(request, db)
+    require_admin_role(admin, {"superadmin"})
+    body = await request.json()
+    allowed = {
+        'auto_complete_enabled',
+        'auto_complete_hours',
+        'referral_enabled',
+        'referral_commission_pct',
+        'referral_min_deposit'
+    }
+    payload = {k: v for k, v in body.items() if k in allowed}
+    for key, value in payload.items():
+        await db.site_settings.update_one(
+            {'key': key},
+            {'$set': {'value': str(value), 'updatedAt': datetime.now(timezone.utc)}},
+            upsert=True
+        )
+    await log_admin_action(db, request, admin, "AUTOMATION_SETTINGS_UPDATED", f"Keys: {', '.join(payload.keys())}")
+    return {'message': 'Automation settings updated'}
+
+async def _refresh_provider_balances_if_needed():
+    try:
+        providers = await db.api_providers.find({'status': True}).to_list(200)
+        now = datetime.now(timezone.utc)
+        to_refresh = []
+        for p in providers:
+            last = p.get('lastTestedAt')
+            if not last or (now - last) > timedelta(hours=1):
+                to_refresh.append(p)
+        if not to_refresh:
+            return
+        async with httpx.AsyncClient(timeout=10) as client_http:
+            for p in to_refresh:
+                try:
+                    api_url = (p.get('apiUrl') or '').strip()
+                    api_key = p.get('apiKey') or ''
+                    if not api_url or not api_key:
+                        await db.api_providers.update_one(
+                            {'_id': p['_id']},
+                            {'$set': {'lastTestedAt': now, 'lastTestOk': False}}
+                        )
+                        continue
+
+                    resp = await client_http.post(api_url, data={'key': api_key, 'action': 'balance'})
+                    result = resp.json()
+                    if 'balance' in result:
+                        try:
+                            balance = float(result['balance'])
+                        except Exception:
+                            balance = None
+                        await db.api_providers.update_one(
+                            {'_id': p['_id']},
+                            {'$set': {'lastBalance': balance, 'lastTestedAt': now, 'lastTestOk': balance is not None}}
+                        )
+                    else:
+                        await db.api_providers.update_one(
+                            {'_id': p['_id']},
+                            {'$set': {'lastTestedAt': now, 'lastTestOk': False}}
+                        )
+                except Exception:
+                    await db.api_providers.update_one(
+                        {'_id': p['_id']},
+                        {'$set': {'lastTestedAt': now, 'lastTestOk': False}}
+                    )
+    except Exception as e:
+        print(f"[admin/stats/overview] provider refresh failed: {e}")
+
+def _day_start(dt: datetime) -> datetime:
+    return dt.replace(hour=0, minute=0, second=0, microsecond=0)
+
+@router.get("/admin/stats/today")
+async def admin_stats_today(request: Request):
+    from backend.middleware.admin import get_current_admin
+    await get_current_admin(request, db)
+    now = datetime.now(timezone.utc)
+    start = _day_start(now)
+    orders_today = await db.orders.count_documents({'createdAt': {'$gte': start}})
+    revenue_agg = await db.orders.aggregate([
+        {'$match': {'createdAt': {'$gte': start}}},
+        {'$group': {'_id': None, 'total': {'$sum': '$charge'}}}
+    ]).to_list(1)
+    revenue_today = float(revenue_agg[0]['total']) if revenue_agg else 0.0
+    new_users_today = await db.users.count_documents({'role': {'$ne': 'admin'}, 'createdAt': {'$gte': start}})
+    pending_payments = await db.crypto_payment_sessions.count_documents({'status': {'$in': ['pending', 'detecting']}})
+    return {
+        'ordersToday': orders_today,
+        'revenueToday': round(revenue_today, 2),
+        'newUsersToday': new_users_today,
+        'pendingPayments': pending_payments,
+    }
+
+@router.get("/admin/stats/overview")
+async def admin_stats_overview(request: Request):
+    from backend.middleware.admin import get_current_admin
+    await get_current_admin(request, db)
+    try:
+        await _refresh_provider_balances_if_needed()
+
+        total_orders = await db.orders.count_documents({})
+        revenue_agg = await db.orders.aggregate([
+            {'$group': {'_id': None, 'total': {'$sum': '$charge'}}}
+        ]).to_list(1)
+        total_revenue = float(revenue_agg[0]['total']) if revenue_agg else 0.0
+        total_users = await db.users.count_documents({'role': {'$ne': 'admin'}})
+        active_services = await db.services.count_documents({'status': True})
+
+        providers = await db.api_providers.find({}).to_list(200)
+        low = []
+        now = datetime.now(timezone.utc)
+        for p in providers:
+            bal_raw = p.get('lastBalance')
+            last = p.get('lastTestedAt')
+            ok = p.get('lastTestOk', True)
+            stale = (not last) or ((now - last) > timedelta(hours=1))
+            bal = None
+            try:
+                if bal_raw is not None:
+                    bal = float(bal_raw)
+            except Exception:
+                bal = None
+
+            if bal is not None and bal < 10:
+                low.append({'id': str(p.get('_id')), 'name': p.get('name', ''), 'balance': bal})
+            p['health'] = 'red' if stale or not ok else ('yellow' if bal is not None and bal < 10 else 'green')
+
+        return {
+            'totalOrders': total_orders,
+            'totalRevenue': round(total_revenue, 2),
+            'totalUsers': total_users,
+            'activeServices': active_services,
+            'lowBalanceProviders': low,
+            'providers': [
+                {
+                    'id': str(p.get('_id')),
+                    'name': p.get('name', ''),
+                    'lastTestedAt': p.get('lastTestedAt'),
+                    'lastBalance': p.get('lastBalance'),
+                    'health': p.get('health', 'red')
+                } for p in providers
+            ]
+        }
+    except Exception as e:
+        print(f"[admin/stats/overview] failed: {e}")
+        return {
+            'totalOrders': 0,
+            'totalRevenue': 0.0,
+            'totalUsers': 0,
+            'activeServices': 0,
+            'lowBalanceProviders': [],
+            'providers': [],
+            'error': 'Failed to load overview stats'
+        }
+
+@router.get("/admin/stats/orders-by-status")
+async def admin_orders_by_status(request: Request):
+    from backend.middleware.admin import get_current_admin
+    await get_current_admin(request, db)
+    agg = await db.orders.aggregate([
+        {'$group': {'_id': '$status', 'count': {'$sum': 1}}},
+        {'$sort': {'count': -1}}
+    ]).to_list(50)
+    return [{'status': a['_id'] or 'Unknown', 'count': a['count']} for a in agg]
+
+@router.get("/admin/stats/top-services")
+async def admin_top_services(request: Request):
+    from backend.middleware.admin import get_current_admin
+    await get_current_admin(request, db)
+    agg = await db.orders.aggregate([
+        {'$group': {'_id': '$serviceId', 'count': {'$sum': 1}}},
+        {'$sort': {'count': -1}},
+        {'$limit': 5}
+    ]).to_list(5)
+    result = []
+    for a in agg:
+        svc = await db.services.find_one({'_id': a['_id']})
+        result.append({'serviceId': str(a['_id']), 'serviceName': svc['name'] if svc else 'Unknown', 'count': a['count']})
+    return result
+
+@router.get("/admin/stats/revenue")
+async def admin_revenue_series(request: Request, period: str = 'daily'):
+    from backend.middleware.admin import get_current_admin
+    await get_current_admin(request, db)
+    now = datetime.now(timezone.utc)
+    if period == 'daily':
+        start = _day_start(now) - timedelta(days=29)
+        fmt = "%Y-%m-%d"
+        step = timedelta(days=1)
+        buckets = 30
+        key_fn = lambda d: d.strftime(fmt)
+    elif period == 'weekly':
+        start = _day_start(now) - timedelta(weeks=11)
+        step = timedelta(weeks=1)
+        buckets = 12
+        key_fn = lambda d: f"{d.isocalendar().year}-W{d.isocalendar().week:02d}"
+    else:
+        start = _day_start(now) - timedelta(days=365)
+        step = timedelta(days=30)
+        buckets = 12
+        key_fn = lambda d: f"{d.year}-{d.month:02d}"
+
+    orders = await db.orders.find({'createdAt': {'$gte': start}}).to_list(50000)
+    series = {}
+    for o in orders:
+        dt = o.get('createdAt')
+        if not dt:
+            continue
+        if period == 'daily':
+            key = key_fn(_day_start(dt))
+        elif period == 'weekly':
+            ds = _day_start(dt)
+            key = key_fn(ds)
+        else:
+            key = f"{dt.year}-{dt.month:02d}"
+        series[key] = series.get(key, 0.0) + float(o.get('charge', 0))
+
+    labels = []
+    values = []
+    cursor = start
+    for _ in range(buckets):
+        labels.append(key_fn(cursor) if period != 'monthly' else f"{cursor.year}-{cursor.month:02d}")
+        cursor = cursor + step
+    for lbl in labels:
+        values.append(round(series.get(lbl, 0.0), 2))
+    return {'labels': labels, 'values': values}
 
 @router.post("/admin/settings/logo")
 async def admin_upload_logo(request: Request, file: UploadFile = File(...)):
     """Upload site logo (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     # Validate file type
@@ -117,7 +411,7 @@ async def admin_upload_logo(request: Request, file: UploadFile = File(...)):
 @router.post("/admin/settings/favicon")
 async def admin_upload_favicon(request: Request, file: UploadFile = File(...)):
     """Upload site favicon (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     # Validate file type
@@ -152,7 +446,7 @@ async def admin_upload_favicon(request: Request, file: UploadFile = File(...)):
 @router.get("/admin/dashboard/stats")
 async def admin_get_dashboard_stats(request: Request):
     """Get dashboard statistics (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     # Total users
@@ -235,19 +529,74 @@ async def admin_get_dashboard_stats(request: Request):
 @router.get("/stats/public")
 async def get_public_stats():
     """Get public stats for the landing page (no auth required)"""
-    total_orders = await db.orders.count_documents({})
-    total_users = await db.users.count_documents({'role': {'$ne': 'admin'}})
+    keys = [
+        'public_fake_stats_enabled',
+        'public_fake_orders_base',
+        'public_fake_users_base',
+        'public_fake_orders_inc_per_hour',
+        'public_fake_users_inc_per_hour',
+        'public_fake_stats_start',
+        'public_starting_price'
+    ]
+    docs = await db.site_settings.find({'key': {'$in': keys}}).to_list(len(keys))
+    settings = {d['key']: d.get('value', '') for d in docs}
+    for k in keys:
+        settings.setdefault(k, '')
+
+    def _as_int(val: str, default: int = 0) -> int:
+        try:
+            return int(float(val))
+        except Exception:
+            return default
+
+    def _as_float(val: str, default: float = 0.0) -> float:
+        try:
+            return float(val)
+        except Exception:
+            return default
+
+    def _as_bool(val: str) -> bool:
+        return str(val).lower() == 'true'
+
+    starting_price = _as_float(settings.get('public_starting_price', ''), 0.002)
+
+    if _as_bool(settings.get('public_fake_stats_enabled', 'false')):
+        base_orders = _as_int(settings.get('public_fake_orders_base', '0'), 0)
+        base_users = _as_int(settings.get('public_fake_users_base', '0'), 0)
+        inc_orders = _as_int(settings.get('public_fake_orders_inc_per_hour', '0'), 0)
+        inc_users = _as_int(settings.get('public_fake_users_inc_per_hour', '0'), 0)
+
+        start_raw = settings.get('public_fake_stats_start', '') or ''
+        start_dt = None
+        if start_raw:
+            try:
+                start_dt = datetime.fromisoformat(start_raw.replace('Z', '+00:00'))
+                if start_dt.tzinfo is None:
+                    start_dt = start_dt.replace(tzinfo=timezone.utc)
+            except Exception:
+                start_dt = None
+        if start_dt is None:
+            start_dt = datetime.now(timezone.utc)
+
+        now = datetime.now(timezone.utc)
+        hours = int(max(0, (now - start_dt).total_seconds() // 3600))
+        total_orders = max(0, base_orders + (hours * inc_orders))
+        total_users = max(0, base_users + (hours * inc_users))
+    else:
+        total_orders = await db.orders.count_documents({})
+        total_users = await db.users.count_documents({'role': {'$ne': 'admin'}})
 
     return {
         'totalOrders': total_orders,
-        'totalUsers': total_users
+        'totalUsers': total_users,
+        'startingPrice': starting_price
     }
 
 # User dashboard stats
 @router.get("/dashboard/stats")
 async def get_user_dashboard_stats(request: Request):
     """Get user dashboard statistics"""
-    from middleware.auth import get_current_user
+    from backend.middleware.auth import get_current_user
     
     user = await get_current_user(request, db)
     user_id = ObjectId(user['_id'])

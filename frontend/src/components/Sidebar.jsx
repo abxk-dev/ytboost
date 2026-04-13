@@ -7,17 +7,20 @@ import {
   PlusCircle, 
   List, 
   History, 
+  BarChart3,
+  Wallet,
+  LifeBuoy,
+  Share2,
   User, 
   Key, 
   Settings, 
   ChevronDown,
   ChevronRight,
-  Menu,
   X
 } from 'lucide-react';
 
 export default function Sidebar({ isOpen, setIsOpen }) {
-  const { settings } = useSettings();
+  useSettings();
   const [expandedMenus, setExpandedMenus] = useState({
     orders: true,
     account: false
@@ -113,6 +116,26 @@ export default function Sidebar({ isOpen, setIsOpen }) {
           <NavLink to="/dashboard/transactions" className={navLinkClass} data-testid="nav-transactions">
             <History className="w-5 h-5" />
             Transaction History
+          </NavLink>
+
+          <NavLink to="/dashboard/add-funds" className={navLinkClass} data-testid="nav-add-funds">
+            <Wallet className="w-5 h-5" />
+            Add Funds
+          </NavLink>
+
+          <NavLink to="/dashboard/analytics" className={navLinkClass} data-testid="nav-analytics">
+            <BarChart3 className="w-5 h-5" />
+            Analytics
+          </NavLink>
+
+          <NavLink to="/dashboard/support" className={navLinkClass} data-testid="nav-support">
+            <LifeBuoy className="w-5 h-5" />
+            Support
+          </NavLink>
+
+          <NavLink to="/dashboard/referral" className={navLinkClass} data-testid="nav-referral">
+            <Share2 className="w-5 h-5" />
+            Referral
           </NavLink>
 
           {/* Account */}

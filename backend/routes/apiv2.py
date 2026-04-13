@@ -1,11 +1,13 @@
 """
 API v2 Routes - Reseller API
 """
-from fastapi import APIRouter, HTTPException, Request
-from pydantic import BaseModel
+from fastapi import APIRouter, Request
 from datetime import datetime, timezone
 from bson import ObjectId
 import re
+from time import perf_counter
+from pymongo import ReturnDocument
+from backend.middleware.admin import get_request_ip
 
 router = APIRouter(tags=["API v2"])
 
@@ -21,6 +23,35 @@ def validate_youtube_url(url: str) -> bool:
     youtube_pattern = r'(youtube\.com|youtu\.be)'
     return bool(re.search(youtube_pattern, url, re.IGNORECASE))
 
+def _mask_key(key: str) -> str:
+    if not key:
+        return ""
+    s = str(key)
+    if len(s) <= 10:
+        return "sk-" + ("*" * max(0, len(s) - 3)) + s[-3:]
+    return f"sk-{s[:4]}...{s[-4:]}"
+
+def _ok(result):
+    return result
+
+def _err(message: str):
+    return {"error": message}
+
+async def _read_body(request: Request) -> dict:
+    try:
+        form = await request.form()
+        if form:
+            return {k: v for k, v in form.items()}
+    except Exception:
+        pass
+    try:
+        data = await request.json()
+        if isinstance(data, dict):
+            return data
+    except Exception:
+        pass
+    return {}
+
 @router.post("/v2")
 async def api_v2_handler(request: Request):
     """
@@ -31,140 +62,244 @@ async def api_v2_handler(request: Request):
     - add: Create new order
     - status: Get order status
     - balance: Get account balance
+    - cancel: Request cancellation
     """
+    t0 = perf_counter()
+    ip = get_request_ip(request)
+    body = await _read_body(request)
+    action = str(body.get("action") or "").strip()
+    key = str(body.get("key") or "").strip()
+
+    user = None
+    user_id = None
+    http_status = 200
+    response = _err("Incorrect request")
+
     try:
-        body = await request.json()
-    except:
-        raise HTTPException(status_code=400, detail="Invalid JSON")
-    
-    action = body.get('action')
-    key = body.get('key')
-    
-    if action == 'services':
-        # Public action - no key required
-        services = await db.services.find({'status': True}).to_list(1000)
-        result = []
-        for svc in services:
-            cat = await db.categories.find_one({'_id': svc['categoryId']})
-            result.append({
-                'service': str(svc['_id']),
-                'name': svc['name'],
-                'category': cat['name'] if cat else 'Unknown',
-                'rate': svc['rate'],
-                'min': svc['minQty'],
-                'max': svc['maxQty'],
-                'type': svc.get('type', 'Default')
+        if not action:
+            response = _err("Incorrect request")
+            return response
+
+        if not key:
+            response = _err("Invalid API key")
+            return response
+
+        user = await db.users.find_one({"apiKey": key, "status": "active"})
+        if not user:
+            response = _err("Invalid API key")
+            return response
+
+        user_id = user["_id"]
+        await db.users.update_one({"_id": user_id}, {"$set": {"apiKeyLastUsedAt": datetime.now(timezone.utc)}})
+
+        if action == "balance":
+            response = _ok({"balance": round(float(user.get("balance", 0) or 0), 4), "currency": "USD"})
+            return response
+
+        if action == "services":
+            services = await db.services.find({"status": True}).to_list(5000)
+            special_services = await db.user_special_services.find({"userId": user_id, "status": True}).to_list(5000)
+            special_map = {ss["serviceId"]: ss for ss in special_services if ss.get("serviceId")}
+
+            cat_ids = list({s.get("categoryId") for s in services if s.get("categoryId")})
+            cats = await db.categories.find({"_id": {"$in": cat_ids}}, {"name": 1}).to_list(len(cat_ids) or 1)
+            cat_name = {c["_id"]: c.get("name", "Unknown") for c in cats}
+
+            ordered = []
+            for ss in special_services:
+                svc = next((s for s in services if s["_id"] == ss.get("serviceId")), None)
+                if not svc:
+                    continue
+                ordered.append((svc, ss))
+            for svc in services:
+                if svc["_id"] in special_map:
+                    continue
+                ordered.append((svc, None))
+
+            result = []
+            for svc, ss in ordered:
+                rate = float(ss["customRate"]) if ss else float(svc.get("rate", 0))
+                min_qty = int(ss.get("minQty", svc.get("minQty", 0))) if ss else int(svc.get("minQty", 0))
+                max_qty = int(ss.get("maxQty", svc.get("maxQty", 0))) if ss else int(svc.get("maxQty", 0))
+                result.append({
+                    "service": str(svc["_id"]),
+                    "name": svc.get("name", ""),
+                    "category": cat_name.get(svc.get("categoryId"), "Unknown"),
+                    "rate": rate,
+                    "min": min_qty,
+                    "max": max_qty,
+                    "type": svc.get("type", "Default"),
+                })
+            response = _ok(result)
+            return response
+
+        if action == "add":
+            service_id = str(body.get("service") or "").strip()
+            link = str(body.get("link") or "").strip()
+            quantity_raw = body.get("quantity")
+            if not service_id or not link or quantity_raw is None:
+                response = _err("Incorrect request")
+                return response
+            try:
+                quantity = int(quantity_raw)
+            except Exception:
+                response = _err("Incorrect request")
+                return response
+            if not validate_youtube_url(link):
+                response = _err("Incorrect request")
+                return response
+            try:
+                svc_obj_id = ObjectId(service_id)
+            except Exception:
+                response = _err("Incorrect request")
+                return response
+            service = await db.services.find_one({"_id": svc_obj_id, "status": True})
+            if not service:
+                response = _err("Incorrect request")
+                return response
+
+            special = await db.user_special_services.find_one({"userId": user_id, "serviceId": svc_obj_id, "status": True})
+            if special:
+                rate = float(special.get("customRate", service.get("rate", 0)))
+                min_qty = int(special.get("minQty", service.get("minQty", 0)))
+                max_qty = int(special.get("maxQty", service.get("maxQty", 0)))
+            else:
+                rate = float(service.get("rate", 0))
+                min_qty = int(service.get("minQty", 0))
+                max_qty = int(service.get("maxQty", 0))
+
+            if quantity < min_qty or quantity > max_qty:
+                response = _err("Incorrect request")
+                return response
+
+            svc_type = service.get("type", "Default")
+            if svc_type == "Package":
+                charge = float(service.get("packagePrice", rate) or rate)
+                qty_for_order = 1
+            else:
+                charge = (quantity / 1000) * rate
+                qty_for_order = quantity
+
+            updated_user = await db.users.find_one_and_update(
+                {"_id": user_id, "balance": {"$gte": charge}},
+                {"$inc": {"balance": -charge}},
+                return_document=ReturnDocument.AFTER
+            )
+            if not updated_user:
+                response = _err("Insufficient balance")
+                return response
+
+            fulfillment = service.get("fulfillmentType", "manual")
+            provider_name = ""
+            provider_order_id = ""
+            if fulfillment == "auto" and service.get("providerId"):
+                provider = await db.api_providers.find_one({"_id": service["providerId"]})
+                if provider and provider.get("status", True):
+                    provider_name = provider.get("name", "")
+                    try:
+                        import httpx
+                        async with httpx.AsyncClient(timeout=15) as client_http:
+                            resp = await client_http.post(provider["apiUrl"], data={
+                                "key": provider["apiKey"],
+                                "action": "add",
+                                "service": service.get("providerServiceId", ""),
+                                "link": link,
+                                "quantity": qty_for_order,
+                            })
+                            provider_result = resp.json()
+                            if "order" in provider_result:
+                                provider_order_id = str(provider_result["order"])
+                    except Exception:
+                        pass
+
+            now = datetime.now(timezone.utc)
+            order_doc = {
+                "userId": user_id,
+                "serviceId": svc_obj_id,
+                "serviceType": service.get("type", "Default"),
+                "link": link,
+                "quantity": qty_for_order,
+                "charge": round(float(charge), 4),
+                "status": "Pending",
+                "startCount": 0,
+                "remains": qty_for_order,
+                "customData": "",
+                "duration": "",
+                "fulfillmentType": fulfillment,
+                "providerName": provider_name,
+                "providerOrderId": provider_order_id,
+                "refillHistory": [],
+                "viaApi": True,
+                "createdAt": now,
+            }
+            insert = await db.orders.insert_one(order_doc)
+
+            await db.transactions.insert_one({
+                "userId": user_id,
+                "type": "debit",
+                "amount": float(charge),
+                "description": f'API Order #{str(insert.inserted_id)[-8:]} - {service.get("name","")}',
+                "balanceAfter": float(updated_user.get("balance", 0) or 0),
+                "createdAt": now,
             })
-        return result
-    
-    # All other actions require API key
-    if not key:
-        raise HTTPException(status_code=400, detail="API key required")
-    
-    # Verify API key
-    user = await db.users.find_one({'apiKey': key, 'status': 'active'})
-    if not user:
-        raise HTTPException(status_code=401, detail="Invalid API key")
-    
-    user_id = user['_id']
-    
-    if action == 'balance':
-        return {
-            'balance': user.get('balance', 0),
-            'currency': 'USD'
-        }
-    
-    elif action == 'add':
-        service_id = body.get('service')
-        link = body.get('link')
-        quantity = body.get('quantity')
-        
-        if not all([service_id, link, quantity]):
-            raise HTTPException(status_code=400, detail="Missing parameters: service, link, quantity required")
-        
+
+            response = _ok({"order": str(insert.inserted_id)})
+            return response
+
+        if action == "status":
+            order_id = str(body.get("order") or "").strip()
+            if not order_id:
+                response = _err("Incorrect order ID")
+                return response
+            try:
+                order_obj_id = ObjectId(order_id)
+            except Exception:
+                response = _err("Incorrect order ID")
+                return response
+            order = await db.orders.find_one({"_id": order_obj_id, "userId": user_id})
+            if not order:
+                response = _err("Incorrect order ID")
+                return response
+            response = _ok({
+                "charge": float(order.get("charge", 0) or 0),
+                "start_count": int(order.get("startCount", 0) or 0),
+                "status": order.get("status", ""),
+                "remains": int(order.get("remains", 0) or 0),
+            })
+            return response
+
+        if action == "cancel":
+            order_id = str(body.get("order") or "").strip()
+            if not order_id:
+                response = _err("Incorrect order ID")
+                return response
+            try:
+                order_obj_id = ObjectId(order_id)
+            except Exception:
+                response = _err("Incorrect order ID")
+                return response
+            order = await db.orders.find_one({"_id": order_obj_id, "userId": user_id})
+            if not order:
+                response = _err("Incorrect order ID")
+                return response
+            await db.orders.update_one({"_id": order_obj_id}, {"$set": {"status": "Cancellation Requested", "cancellationRequestedAt": datetime.now(timezone.utc)}})
+            response = _ok({"cancel": str(order_obj_id)})
+            return response
+
+        response = _err("Incorrect request")
+        return response
+    finally:
         try:
-            quantity = int(quantity)
-        except:
-            raise HTTPException(status_code=400, detail="Invalid quantity")
-        
-        if not validate_youtube_url(link):
-            raise HTTPException(status_code=400, detail="Invalid YouTube URL")
-        
-        try:
-            svc_obj_id = ObjectId(service_id)
-        except:
-            raise HTTPException(status_code=400, detail="Invalid service ID")
-        
-        service = await db.services.find_one({'_id': svc_obj_id, 'status': True})
-        if not service:
-            raise HTTPException(status_code=404, detail="Service not found")
-        
-        # Check quantity limits
-        if quantity < service['minQty'] or quantity > service['maxQty']:
-            raise HTTPException(status_code=400, detail=f"Quantity must be between {service['minQty']} and {service['maxQty']}")
-        
-        # Calculate charge
-        charge = (quantity / 1000) * service['rate']
-        
-        # Check balance
-        if user.get('balance', 0) < charge:
-            raise HTTPException(status_code=400, detail="Insufficient balance")
-        
-        # Deduct balance
-        new_balance = user['balance'] - charge
-        await db.users.update_one({'_id': user_id}, {'$set': {'balance': new_balance}})
-        
-        # Create order
-        order_doc = {
-            'userId': user_id,
-            'serviceId': svc_obj_id,
-            'link': link,
-            'quantity': quantity,
-            'charge': round(charge, 4),
-            'status': 'Pending',
-            'startCount': 0,
-            'remains': quantity,
-            'createdAt': datetime.now(timezone.utc)
-        }
-        
-        result = await db.orders.insert_one(order_doc)
-        
-        # Create transaction
-        await db.transactions.insert_one({
-            'userId': user_id,
-            'type': 'debit',
-            'amount': charge,
-            'description': f'API Order #{str(result.inserted_id)[-8:]}',
-            'balanceAfter': new_balance,
-            'createdAt': datetime.now(timezone.utc)
-        })
-        
-        return {
-            'order': str(result.inserted_id)
-        }
-    
-    elif action == 'status':
-        order_id = body.get('order')
-        
-        if not order_id:
-            raise HTTPException(status_code=400, detail="Order ID required")
-        
-        try:
-            order_obj_id = ObjectId(order_id)
-        except:
-            raise HTTPException(status_code=400, detail="Invalid order ID")
-        
-        order = await db.orders.find_one({'_id': order_obj_id, 'userId': user_id})
-        if not order:
-            raise HTTPException(status_code=404, detail="Order not found")
-        
-        return {
-            'charge': order['charge'],
-            'start_count': order.get('startCount', 0),
-            'status': order['status'],
-            'remains': order.get('remains', 0),
-            'currency': 'USD'
-        }
-    
-    else:
-        raise HTTPException(status_code=400, detail=f"Unknown action: {action}")
+            elapsed_ms = int((perf_counter() - t0) * 1000)
+            log_doc = {
+                "userId": user_id if user_id else None,
+                "action": action,
+                "requestBody": body,
+                "responseStatus": http_status,
+                "responseTime": elapsed_ms,
+                "ipAddress": ip,
+                "createdAt": datetime.now(timezone.utc),
+            }
+            await db.api_call_logs.insert_one(log_doc)
+        except Exception:
+            pass

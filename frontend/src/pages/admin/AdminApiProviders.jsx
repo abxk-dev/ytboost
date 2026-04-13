@@ -18,6 +18,7 @@ export default function AdminApiProviders() {
   const c = t(theme);
   const [providers, setProviders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -32,10 +33,13 @@ export default function AdminApiProviders() {
 
   const fetchProviders = async () => {
     try {
+      setLoadError('');
       const { data } = await api.get('/admin/api-providers');
-      setProviders(data);
+      setProviders(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error('Failed to fetch providers:', error);
+      const msg = formatApiError(error);
+      setLoadError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -66,8 +70,8 @@ export default function AdminApiProviders() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.apiUrl.startsWith('https://')) {
-      toast.error('API URL must start with https://');
+    if (!/^https?:\/\//i.test(formData.apiUrl)) {
+      toast.error('API URL must start with http:// or https://');
       return;
     }
     setSubmitting(true);
@@ -160,6 +164,15 @@ export default function AdminApiProviders() {
         </Button>
       </div>
 
+      {loadError && (
+        <div className={`rounded-[12px] border px-4 py-3 flex items-center justify-between gap-3 ${theme === 'dark' ? 'bg-red-500/10 border-red-500/30 text-red-200' : 'bg-red-50 border-red-200 text-red-800'}`}>
+          <div className="text-sm font-medium">{loadError}</div>
+          <Button variant="outline" onClick={() => { setLoading(true); fetchProviders(); }} className={`${c.border} ${c.textSecondary}`}>
+            Retry
+          </Button>
+        </div>
+      )}
+
       <Card className={`${c.card} border ${c.border} rounded-[12px]`}>
         <CardContent className="p-0">
           {loading ? (
@@ -169,7 +182,7 @@ export default function AdminApiProviders() {
               <table className="w-full">
                 <thead>
                   <tr className={`border-b ${c.border}`}>
-                    {['ID','Name','API URL','Markup %','Balance','Status','Last Tested','Actions'].map(h => (
+                    {['ID','Health','Name','API URL','Markup %','Balance','Status','Last Tested','Actions'].map(h => (
                       <th key={h} className={`text-left py-3 px-4 text-xs font-semibold ${c.textMuted} uppercase`}>{h}</th>
                     ))}
                   </tr>
@@ -178,7 +191,15 @@ export default function AdminApiProviders() {
                   {providers.map((p) => (
                     <tr key={p.id} className={`border-b ${c.border} last:border-0 ${c.cardHover}`}>
                       <td className={`py-4 px-4 text-sm font-mono ${c.textSecondary}`}>#{p.id.slice(-6)}</td>
-                      <td className={`py-4 px-4 text-sm font-medium ${c.text}`}>{p.name}</td>
+                      <td className="py-4 px-4">
+                        <div className={`w-3 h-3 rounded-full ${p.health === 'green' ? 'bg-green-500' : p.health === 'yellow' ? 'bg-amber-500' : 'bg-red-500'}`} />
+                      </td>
+                      <td className="py-4 px-4">
+                        <div className="flex flex-col">
+                          <span className={`text-sm font-medium ${c.text}`}>{p.name}</span>
+                          <span className={`text-xs ${c.textMuted}`}>Last checked: {formatDate(p.lastTestedAt)}</span>
+                        </div>
+                      </td>
                       <td className={`py-4 px-4 text-sm ${c.textSecondary} max-w-[200px] truncate`}>{p.apiUrl}</td>
                       <td className={`py-4 px-4 text-sm ${c.text}`}>{p.markup}%</td>
                       <td className="py-4 px-4">
@@ -208,7 +229,19 @@ export default function AdminApiProviders() {
               </table>
             </div>
           ) : (
-            <div className={`py-12 text-center ${c.textMuted}`}><Plug className="w-12 h-12 mx-auto mb-3 opacity-50" /><p>No API providers added yet</p></div>
+            <div className={`py-12 text-center ${c.textMuted}`}>
+              <Plug className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p>No API providers added yet</p>
+              <p className="text-sm mt-1">Click “Add API Provider” to connect your SMM panel provider.</p>
+              <div className="mt-4 flex items-center justify-center gap-2">
+                <Button variant="outline" onClick={() => { setLoading(true); fetchProviders(); }} className={`${c.border} ${c.textSecondary}`}>
+                  Refresh
+                </Button>
+                <Button onClick={() => openDialog()} className="bg-[#7c3aed] hover:bg-[#8b5cf6] text-white rounded-[8px]">
+                  <Plus className="w-4 h-4 mr-2" />Add API Provider
+                </Button>
+              </div>
+            </div>
           )}
         </CardContent>
       </Card>

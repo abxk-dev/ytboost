@@ -1,12 +1,15 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:8001';
+import { BACKEND_ORIGIN } from '../config/apiConfig';
+
+const SOCKET_URL = BACKEND_ORIGIN || '';
 
 export function useSocket() {
   const socketRef = useRef(null);
 
   useEffect(() => {
+    if (!SOCKET_URL) return;
     socketRef.current = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       withCredentials: true,

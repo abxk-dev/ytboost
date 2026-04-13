@@ -9,6 +9,11 @@ export function AdminAuthProvider({ children }) {
 
   const checkAuth = useCallback(async () => {
     try {
+      const token = typeof window !== 'undefined' ? window.localStorage.getItem('admin_token') : null;
+      if (!token) {
+        setAdmin(false);
+        return;
+      }
       const { data } = await api.get('/admin/auth/me');
       setAdmin(data);
     } catch (error) {
@@ -19,12 +24,23 @@ export function AdminAuthProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/admin')) {
+      setAdmin(false);
+      setLoading(false);
+      return;
+    }
     checkAuth();
   }, [checkAuth]);
 
-  const login = async (email, password) => {
-    const { data } = await api.post('/admin/auth/login', { email, password });
-    setAdmin(data);
+  const login = async (email, password, otp) => {
+    const body = { email, password };
+    if (otp) body.otp = otp;
+    const { data } = await api.post('/admin/auth/login', body);
+    if (!data?.twoFactorRequired) {
+      if (data?.access_token) localStorage.setItem('admin_token', data.access_token);
+      if (data?.refresh_token) localStorage.setItem('admin_refresh_token', data.refresh_token);
+      setAdmin(data);
+    }
     return data;
   };
 
@@ -34,6 +50,10 @@ export function AdminAuthProvider({ children }) {
     } catch (error) {
       // Ignore logout errors
     }
+    try {
+      localStorage.removeItem('admin_token');
+      localStorage.removeItem('admin_refresh_token');
+    } catch {}
     setAdmin(false);
   };
 

@@ -30,6 +30,9 @@ class ServiceCreate(BaseModel):
     fulfillmentType: str = "manual"
     providerId: Optional[str] = None
     providerServiceId: Optional[str] = None
+    displaySpeedMin: Optional[int] = None
+    displaySpeedMax: Optional[int] = None
+    displaySpeedUnit: str = ""
 
 class ServiceUpdate(BaseModel):
     name: Optional[str] = None
@@ -51,6 +54,9 @@ class ServiceUpdate(BaseModel):
     fulfillmentType: Optional[str] = None
     providerId: Optional[str] = None
     providerServiceId: Optional[str] = None
+    displaySpeedMin: Optional[int] = None
+    displaySpeedMax: Optional[int] = None
+    displaySpeedUnit: Optional[str] = None
 
 # Dependency injection placeholder
 db = None
@@ -73,6 +79,9 @@ def _service_fields(svc):
         'fulfillmentType': svc.get('fulfillmentType', 'manual'),
         'providerId': str(svc['providerId']) if svc.get('providerId') else None,
         'providerServiceId': svc.get('providerServiceId', ''),
+        'displaySpeedMin': svc.get('displaySpeedMin'),
+        'displaySpeedMax': svc.get('displaySpeedMax'),
+        'displaySpeedUnit': svc.get('displaySpeedUnit', ''),
     }
 
 # Public routes
@@ -99,10 +108,40 @@ async def get_services():
     
     return result
 
+@router.get("/services/live-speeds")
+async def get_live_speeds():
+    categories = await db.categories.find({'status': True}, {'_id': 1, 'name': 1, 'slug': 1}).sort([('order', 1), ('createdAt', 1)]).to_list(1000)
+    services = await db.services.find({'status': True}, {'_id': 1, 'categoryId': 1, 'displaySpeedMin': 1, 'displaySpeedMax': 1, 'displaySpeedUnit': 1}).to_list(5000)
+    by_cat = {}
+    for svc in services:
+        cid = svc.get('categoryId')
+        if not cid:
+            continue
+        by_cat.setdefault(cid, []).append(svc)
+
+    result = []
+    for cat in categories:
+        svcs = by_cat.get(cat['_id'], [])
+        mins = [s.get('displaySpeedMin') for s in svcs if s.get('displaySpeedMin') is not None]
+        maxs = [s.get('displaySpeedMax') for s in svcs if s.get('displaySpeedMax') is not None]
+        unit = ''
+        for s in svcs:
+            if s.get('displaySpeedUnit'):
+                unit = s.get('displaySpeedUnit', '')
+                break
+        result.append({
+            'categoryId': str(cat['_id']),
+            'categoryName': cat.get('name', ''),
+            'displaySpeedMin': int(min(mins)) if mins else 0,
+            'displaySpeedMax': int(max(maxs)) if maxs else 0,
+            'displaySpeedUnit': unit or ''
+        })
+    return result
+
 @router.get("/services/user")
 async def get_user_services(request: Request):
     """Get services with user's special rates (authenticated)"""
-    from middleware.auth import get_current_user
+    from backend.middleware.auth import get_current_user
     
     user = await get_current_user(request, db)
     user_id = ObjectId(user['_id'])
@@ -132,6 +171,7 @@ async def get_user_services(request: Request):
                 'categoryName': cat['name'] if cat else 'Unknown',
                 'description': svc.get('description', ''),
                 'rate': ss['customRate'],  # Use custom rate
+                'publicRate': svc.get('rate', ss['customRate']),
                 'minQty': ss.get('minQty', svc['minQty']),
                 'maxQty': ss.get('maxQty', svc['maxQty']),
                 'type': svc.get('type', 'Default'),
@@ -151,6 +191,7 @@ async def get_user_services(request: Request):
                 'categoryName': cat['name'] if cat else 'Unknown',
                 'description': svc.get('description', ''),
                 'rate': svc['rate'],
+                'publicRate': svc['rate'],
                 'minQty': svc['minQty'],
                 'maxQty': svc['maxQty'],
                 'type': svc.get('type', 'Default'),
@@ -164,7 +205,7 @@ async def get_user_services(request: Request):
 @router.get("/admin/services")
 async def admin_get_services(request: Request):
     """Get all services (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     services = await db.services.find({}).to_list(1000)
@@ -189,10 +230,24 @@ async def admin_get_services(request: Request):
     
     return result
 
+@router.post("/admin/services/seed-defaults")
+async def admin_seed_default_services(request: Request):
+    from backend.middleware.admin import get_current_admin, require_admin_role, log_admin_action
+    admin = await get_current_admin(request, db)
+    require_admin_role(admin, {"superadmin"})
+
+    from seed import seed_database
+    await seed_database(db)
+
+    cats = await db.categories.count_documents({})
+    svcs = await db.services.count_documents({})
+    await log_admin_action(db, request, admin, "SERVICES_SEEDED_DEFAULTS", f"categories={cats}, services={svcs}")
+    return {"message": "Defaults seeded", "categories": cats, "services": svcs}
+
 @router.post("/admin/services")
 async def admin_create_service(request: Request, data: ServiceCreate):
     """Create new service (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     try:
@@ -200,8 +255,10 @@ async def admin_create_service(request: Request, data: ServiceCreate):
     except:
         raise HTTPException(status_code=400, detail="Invalid category ID")
     
-    # Verify category exists
-    category = await db.categories.find_one({'_id': cat_id})
+    try:
+        category = await db.categories.find_one({'_id': cat_id})
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Database unavailable: {e}")
     if not category:
         raise HTTPException(status_code=400, detail="Category not found")
     
@@ -228,10 +285,16 @@ async def admin_create_service(request: Request, data: ServiceCreate):
         'fulfillmentType': data.fulfillmentType,
         'providerId': ObjectId(data.providerId) if data.providerId else None,
         'providerServiceId': data.providerServiceId or '',
+        'displaySpeedMin': data.displaySpeedMin,
+        'displaySpeedMax': data.displaySpeedMax,
+        'displaySpeedUnit': data.displaySpeedUnit or '',
         'createdAt': datetime.now(timezone.utc)
     }
     
-    result = await db.services.insert_one(service_doc)
+    try:
+        result = await db.services.insert_one(service_doc)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Database unavailable: {e}")
     
     return {
         'id': str(result.inserted_id),
@@ -248,7 +311,7 @@ async def admin_create_service(request: Request, data: ServiceCreate):
 @router.put("/admin/services/{service_id}")
 async def admin_update_service(request: Request, service_id: str, data: ServiceUpdate):
     """Update service (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     try:
@@ -288,6 +351,10 @@ async def admin_update_service(request: Request, service_id: str, data: ServiceU
         val = getattr(data, field, None)
         if val is not None:
             update_data[field] = val
+    for field in ['displaySpeedMin', 'displaySpeedMax', 'displaySpeedUnit']:
+        val = getattr(data, field, None)
+        if val is not None:
+            update_data[field] = val
     if data.refillEnabled is not None:
         update_data['refillEnabled'] = data.refillEnabled
     if data.packagePrice is not None:
@@ -307,7 +374,7 @@ async def admin_update_service(request: Request, service_id: str, data: ServiceU
 @router.delete("/admin/services/{service_id}")
 async def admin_delete_service(request: Request, service_id: str):
     """Delete service (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     try:
@@ -327,7 +394,7 @@ async def admin_delete_service(request: Request, service_id: str):
 @router.patch("/admin/services/{service_id}/status")
 async def admin_toggle_service_status(request: Request, service_id: str):
     """Toggle service status (admin)"""
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     try:

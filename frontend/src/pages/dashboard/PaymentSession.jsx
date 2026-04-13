@@ -21,6 +21,9 @@ export default function PaymentSession() {
   const [copied, setCopied] = useState(false);
   const [timeLeft, setTimeLeft] = useState(null);
   const [status, setStatus] = useState('pending');
+  const [expiresAtMs, setExpiresAtMs] = useState(null);
+  const [txHash, setTxHash] = useState('');
+  const [verifying, setVerifying] = useState(false);
 
   // Fetch session data
   const fetchSession = useCallback(async () => {
@@ -32,9 +35,15 @@ export default function PaymentSession() {
       // Calculate time left
       if (data.expiresAt) {
         const expires = new Date(data.expiresAt).getTime();
-        const now = Date.now();
-        const diff = Math.max(0, Math.floor((expires - now) / 1000));
-        setTimeLeft(diff);
+        if (Number.isFinite(expires)) {
+          setExpiresAtMs(expires);
+          const now = Date.now();
+          const diff = Math.max(0, Math.floor((expires - now) / 1000));
+          setTimeLeft(diff);
+        } else {
+          setExpiresAtMs(null);
+          setTimeLeft(null);
+        }
       }
     } catch (error) {
       console.error('Failed to fetch session:', error);
@@ -88,21 +97,18 @@ export default function PaymentSession() {
 
   // Countdown timer
   useEffect(() => {
-    if (timeLeft === null || timeLeft <= 0 || status === 'credited') return;
+    if (expiresAtMs == null || status === 'credited') return;
 
-    const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          setStatus('expired');
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    const tick = () => {
+      const now = Date.now();
+      const diff = Math.max(0, Math.floor((expiresAtMs - now) / 1000));
+      setTimeLeft(diff);
+    };
 
+    tick();
+    const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
-  }, [timeLeft, status]);
+  }, [expiresAtMs, status]);
 
   // Poll for updates as fallback
   useEffect(() => {
@@ -130,6 +136,38 @@ export default function PaymentSession() {
     }
   };
 
+  const handleVerifyHash = async (e) => {
+    e.preventDefault();
+    if (!txHash.trim()) return;
+    if (txHash.length < 64) {
+      toast.error('Invalid transaction hash');
+      return;
+    }
+
+    setVerifying(true);
+    try {
+      const { data } = await api.post('/crypto/verify-hash', {
+        sessionId,
+        txHash: txHash.trim()
+      });
+      
+      toast.success(data.message || 'Payment verified!');
+      fetchSession();
+      if (data.status === 'credited') {
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+      }
+    } catch (error) {
+      console.error('Verification failed:', error);
+      toast.error(error.response?.data?.detail || 'Verification failed. Please check the hash and try again.');
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -150,12 +188,87 @@ export default function PaymentSession() {
     switch (status) {
       case 'pending':
         return (
-          <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-[12px] border border-gray-200">
-            <Clock className="w-6 h-6 text-gray-500 animate-pulse" />
-            <div>
-              <p className="font-medium text-gray-700">Waiting for payment...</p>
-              <p className="text-sm text-gray-500">Send the exact amount to the address above</p>
+          <div className="space-y-6">
+            <div className="p-6 bg-[#0f172a] rounded-[16px] border border-[#334155] shadow-xl">
+              <p className="text-[10px] font-bold text-[#64748b] text-center tracking-widest uppercase mb-4">
+                Our BEP20 Receiving Address
+              </p>
+              
+              <div className="relative group">
+                <div className="flex items-center gap-2 p-4 bg-[#020617] rounded-[12px] border border-[#334155] transition-all group-hover:border-[#7c3aed]/50">
+                  <code className="flex-1 text-sm font-mono text-[#e879f9] break-all text-center">
+                    {session.depositAddress}
+                  </code>
+                  <button
+                    onClick={handleCopy}
+                    className="p-2 hover:bg-[#1e293b] rounded-[8px] transition-colors text-[#94a3b8]"
+                  >
+                    {copied ? (
+                      <Check className="w-4 h-4 text-green-500" />
+                    ) : (
+                      <Copy className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-6 flex justify-center">
+                <div className="p-3 bg-white rounded-[16px]">
+                  <QRCodeSVG
+                    value={session.depositAddress}
+                    size={180}
+                    level="H"
+                    includeMargin={false}
+                  />
+                </div>
+              </div>
             </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Token</label>
+                <div className="p-3 bg-[#0f172a] border border-[#334155] rounded-[10px] text-sm text-[#f1f5f9] font-medium">
+                  {session.coinName} ({session.network})
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Amount (USD)</label>
+                <div className="p-3 bg-[#0f172a] border border-[#334155] rounded-[10px] text-sm text-[#f1f5f9] font-medium">
+                  Min ${session.expectedAmount}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Transaction Hash (TXID)</label>
+              <input
+                type="text"
+                placeholder="0x..."
+                value={txHash}
+                onChange={(e) => setTxHash(e.target.value)}
+                disabled={verifying}
+                className="w-full px-4 py-3 bg-[#0f172a] border border-[#334155] rounded-[10px] text-[#f1f5f9] text-sm focus:outline-none focus:ring-2 focus:ring-[#7c3aed]/50 placeholder:text-[#334155]"
+              />
+            </div>
+
+            <Button
+              onClick={handleVerifyHash}
+              disabled={verifying || !txHash.trim()}
+              className="w-full h-14 bg-gradient-to-r from-[#c026d3] to-[#7c3aed] hover:from-[#d946ef] hover:to-[#8b5cf6] text-white font-bold rounded-[12px] shadow-lg shadow-[#7c3aed]/20 transition-all active:scale-[0.98]"
+            >
+              {verifying ? (
+                <Loader2 className="w-6 h-6 animate-spin" />
+              ) : (
+                'Verify & Add Funds'
+              )}
+            </Button>
+
+            {timeLeft !== null && (
+              <div className="flex items-center justify-center gap-2 text-[#64748b]">
+                <Clock className="w-4 h-4" />
+                <span className="text-xs font-medium">Session expires in: {formatTime(timeLeft)}</span>
+              </div>
+            )}
           </div>
         );
       case 'detecting':
@@ -221,107 +334,35 @@ export default function PaymentSession() {
     }
   };
 
+  const showTimeEnded = timeLeft === 0 && status !== 'credited' && status !== 'expired';
+
   return (
-    <div className="max-w-[500px] mx-auto" data-testid="payment-session-page">
-      <Card className="bg-white border border-[#e5e7eb] rounded-[12px]">
-        <CardContent className="p-6 space-y-6">
-          {/* Header */}
-          <div className="text-center">
-            <h2 className="text-xl font-bold text-[#111827]">
-              Pay with {session.coinName} ({session.network})
-            </h2>
-          </div>
+    <div className="max-w-[500px] mx-auto py-8 px-4" data-testid="payment-session-page">
+      <div className="mb-8 text-center">
+        <h1 className="text-2xl font-black text-[#111827] tracking-tight mb-2 uppercase italic">
+          Pay with {session.coinName} ({session.network})
+        </h1>
+        <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-[#f5f3ff] rounded-full border border-[#7c3aed]/10">
+          <span className="text-sm font-bold text-[#7c3aed]">Send exactly:</span>
+          <span className="text-lg font-black text-[#7c3aed]">{session.expectedAmount} {session.coinName}</span>
+        </div>
+      </div>
 
-          {/* Amount */}
-          <div className="text-center">
-            <p className="text-sm text-[#6b7280] mb-1">Send exactly:</p>
-            <p className="text-3xl font-bold text-[#111827]" data-testid="payment-amount">
-              {session.expectedAmount} {session.coinName}
-            </p>
-          </div>
-
-          {/* Address */}
-          {status !== 'credited' && status !== 'expired' && (
-            <>
-              <div className="space-y-2">
-                <p className="text-sm text-[#6b7280] text-center">To this address:</p>
-                <div className="flex items-center gap-2 p-3 bg-[#f9fafb] rounded-[8px] border border-[#e5e7eb]">
-                  <code className="flex-1 text-sm font-mono text-[#111827] break-all" data-testid="deposit-address">
-                    {session.depositAddress}
-                  </code>
-                  <button
-                    onClick={handleCopy}
-                    className="p-2 hover:bg-white rounded-[6px] transition-colors"
-                    data-testid="copy-address-btn"
-                  >
-                    {copied ? (
-                      <Check className="w-4 h-4 text-green-600" />
-                    ) : (
-                      <Copy className="w-4 h-4 text-[#6b7280]" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              {/* QR Code */}
-              <div className="flex justify-center">
-                <div className="p-4 bg-white rounded-[12px] border border-[#e5e7eb]">
-                  <QRCodeSVG
-                    value={session.depositAddress}
-                    size={200}
-                    level="M"
-                    includeMargin={true}
-                  />
-                </div>
-              </div>
-
-              {/* Warning */}
-              <div className="flex items-start gap-2 p-3 bg-amber-50 rounded-[8px] border border-amber-200">
-                <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-amber-700">
-                  Send only {session.coinName} on {session.network} network. Sending other coins may result in permanent loss.
-                </p>
-              </div>
-
-              {/* Timer */}
-              {timeLeft !== null && (
-                <div className="text-center">
-                  <p className="text-sm text-[#6b7280] mb-1">Session expires in:</p>
-                  <p className={`text-2xl font-bold ${timeLeft < 300 ? 'text-red-600' : 'text-[#111827]'}`} data-testid="countdown-timer">
-                    {formatTime(timeLeft)}
-                  </p>
-                </div>
-              )}
-            </>
-          )}
-
-          {/* TX Hash */}
-          {session.txHash && (
-            <div className="p-3 bg-[#f9fafb] rounded-[8px] border border-[#e5e7eb]">
-              <p className="text-xs text-[#6b7280] mb-1">Transaction Hash:</p>
-              <div className="flex items-center gap-2">
-                <code className="flex-1 text-xs font-mono text-[#111827] truncate">
-                  {session.txHash}
-                </code>
-                <a
-                  href={`https://bscscan.com/tx/${session.txHash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-1 hover:bg-white rounded"
-                >
-                  <ExternalLink className="w-4 h-4 text-[#7c3aed]" />
-                </a>
-              </div>
-            </div>
-          )}
-
-          {/* Status */}
-          <div>
-            <p className="text-sm text-[#6b7280] mb-3 text-center">Payment Status:</p>
+      <div className="bg-[#111827] rounded-[24px] p-1 shadow-2xl shadow-[#7c3aed]/10">
+        <div className="bg-[#020617] rounded-[22px] overflow-hidden border border-[#334155]">
+          <div className="p-6 sm:p-8">
             {getStatusContent()}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+
+      <div className="mt-8 flex items-start gap-3 p-4 bg-[#fff7ed] rounded-[16px] border border-[#ffedd5]">
+        <AlertTriangle className="w-5 h-5 text-[#f97316] flex-shrink-0 mt-0.5" />
+        <p className="text-xs font-medium text-[#9a3412] leading-relaxed">
+          Send USDT (BEP20) to the address above, then paste your Transaction Hash (TxID) below. 
+          Funds are credited automatically after verification.
+        </p>
+      </div>
     </div>
   );
 }

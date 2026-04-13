@@ -10,9 +10,11 @@ import { Eye, EyeOff, Loader2, Shield } from 'lucide-react';
 export default function AdminLogin() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [otp, setOtp] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [twoFactorRequired, setTwoFactorRequired] = useState(false);
   const { login } = useAdminAuth();
   const navigate = useNavigate();
 
@@ -22,7 +24,12 @@ export default function AdminLogin() {
     setLoading(true);
 
     try {
-      await login(email, password);
+      const res = await login(email, password, twoFactorRequired ? otp : undefined);
+      if (res?.twoFactorRequired) {
+        setTwoFactorRequired(true);
+        setOtp('');
+        return;
+      }
       navigate('/admin');
     } catch (err) {
       setError(formatApiError(err));
@@ -86,6 +93,21 @@ export default function AdminLogin() {
               </button>
             </div>
           </div>
+
+          {twoFactorRequired && (
+            <div className="space-y-2">
+              <Label htmlFor="otp" className="text-[#f1f5f9] font-medium">2FA Code</Label>
+              <Input
+                id="otp"
+                inputMode="numeric"
+                placeholder="6-digit code"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/[^\d]/g, '').slice(0, 6))}
+                required
+                className="h-11 rounded-[8px] bg-[#0f172a] border-[#334155] text-white placeholder:text-[#64748b] focus:border-[#7c3aed] focus:ring-[#7c3aed]"
+              />
+            </div>
+          )}
 
           <Button
             type="submit"

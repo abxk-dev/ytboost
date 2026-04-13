@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api, { formatApiError } from '../../services/api';
 import { Card, CardContent } from '../../components/ui/card';
@@ -30,7 +30,7 @@ export default function Orders() {
     Cancelled: 'bg-red-100 text-red-700 border-red-200',
   };
 
-  const fetchOrders = async () => {
+  const fetchOrders = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page, limit: 20 });
@@ -44,9 +44,9 @@ export default function Orders() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [page, search, statusFilter]);
 
-  useEffect(() => { fetchOrders(); }, [page, search, statusFilter]);
+  useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
   const handleRefill = async () => {
     if (!refillOrder) return;

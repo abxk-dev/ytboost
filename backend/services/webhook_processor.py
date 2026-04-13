@@ -57,6 +57,28 @@ async def credit_payment(session_id: str, amount: float, tx_hash: str, db, socke
             'balanceAfter': new_balance,
             'createdAt': datetime.now(timezone.utc)
         })
+
+        await db.notifications.insert_one({
+            'userId': ObjectId(user_id),
+            'title': 'Deposit approved',
+            'message': f'Your deposit of ${amount:.2f} has been approved!',
+            'type': 'success',
+            'read': False,
+            'createdAt': datetime.now(timezone.utc)
+        })
+
+        await db.user_activity_logs.insert_one({
+            'userId': ObjectId(user_id),
+            'action': 'Funds Added',
+            'details': f'Deposit ${amount:.2f}',
+            'createdAt': datetime.now(timezone.utc)
+        })
+
+        try:
+            deposits_before = await db.crypto_payment_sessions.count_documents({'userId': ObjectId(user_id), 'status': 'credited'})
+            first_deposit = deposits_before == 0
+        except Exception:
+            first_deposit = False
         
         # Mark session as credited
         await db.crypto_payment_sessions.update_one(
@@ -69,6 +91,53 @@ async def credit_payment(session_id: str, amount: float, tx_hash: str, db, socke
                 }
             }
         )
+
+        if first_deposit and user.get('referredBy'):
+            enabled = await db.site_settings.find_one({'key': 'referral_enabled'})
+            if enabled and enabled.get('value') == 'true':
+                pct_doc = await db.site_settings.find_one({'key': 'referral_commission_pct'})
+                min_doc = await db.site_settings.find_one({'key': 'referral_min_deposit'})
+                try:
+                    pct = float(pct_doc.get('value', '0')) if pct_doc else 0.0
+                except Exception:
+                    pct = 0.0
+                try:
+                    min_dep = float(min_doc.get('value', '0')) if min_doc else 0.0
+                except Exception:
+                    min_dep = 0.0
+
+                if pct > 0 and amount >= min_dep:
+                    commission = round((amount * pct) / 100.0, 2)
+                    referrer = await db.users.find_one({'_id': user.get('referredBy')})
+                    if referrer:
+                        ref_new_balance = float(referrer.get('balance', 0)) + commission
+                        ref_new_earnings = float(referrer.get('referralEarnings', 0)) + commission
+                        await db.users.update_one(
+                            {'_id': referrer['_id']},
+                            {'$set': {'balance': ref_new_balance, 'referralEarnings': ref_new_earnings}}
+                        )
+                        await db.transactions.insert_one({
+                            'userId': referrer['_id'],
+                            'type': 'credit',
+                            'amount': commission,
+                            'description': f'Referral earnings — {user.get("name","User")} deposit',
+                            'balanceAfter': ref_new_balance,
+                            'createdAt': datetime.now(timezone.utc)
+                        })
+                        await db.notifications.insert_one({
+                            'userId': referrer['_id'],
+                            'title': 'Referral earning',
+                            'message': f'You earned ${commission:.2f} from your referral {user.get("name","")}\'s deposit!',
+                            'type': 'success',
+                            'read': False,
+                            'createdAt': datetime.now(timezone.utc)
+                        })
+                        await db.user_activity_logs.insert_one({
+                            'userId': referrer['_id'],
+                            'action': 'Funds Added',
+                            'details': f'Referral earning ${commission:.2f}',
+                            'createdAt': datetime.now(timezone.utc)
+                        })
         
         # Emit socket events
         if socket_manager:

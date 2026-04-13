@@ -15,6 +15,13 @@ const TYPE_ICONS = { 'Default': '', 'Custom Comments': '\uD83D\uDCAC', 'Package'
 const QUALITY_COLORS = { 'Ultra High': 'bg-green-100 text-green-700 border-green-200', 'High': 'bg-teal-100 text-teal-700 border-teal-200', 'Medium': 'bg-amber-100 text-amber-700 border-amber-200', 'Low': 'bg-red-100 text-red-700 border-red-200' };
 const DURATION_OPTS = [{ value: '7d', label: '7 Days', mult: 1.0 }, { value: '14d', label: '14 Days', mult: 1.8 }, { value: '30d', label: '30 Days', mult: 3.0 }];
 
+function fmtRate(rate) {
+  const n = Number(rate);
+  if (!Number.isFinite(n)) return '';
+  if (n < 1) return n.toFixed(3);
+  return n.toFixed(2);
+}
+
 function ServiceInfoCard({ service }) {
   const [liveStart, setLiveStart] = useState(service.startTime || '');
   const [liveSpeed, setLiveSpeed] = useState(service.speed || '');
@@ -246,11 +253,28 @@ export default function AddOrder() {
                 <SelectContent>
                   {filteredServices.map(svc => (
                     <SelectItem key={svc.id} value={svc.id}>
-                      <span className="flex items-center gap-2">
-                        {svc.isSpecial && <Star className="w-4 h-4 text-amber-500 fill-amber-500" />}
-                        {TYPE_ICONS[svc.type] && <span>{TYPE_ICONS[svc.type]}</span>}
-                        {svc.name}
-                      </span>
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="flex items-center gap-2 min-w-0">
+                          {svc.isSpecial && (
+                            <span title={`Your special rate: $${fmtRate(svc.rate)}/1000`} className="inline-flex items-center gap-1">
+                              <Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+                              <span className="text-xs font-semibold text-amber-600">VIP</span>
+                            </span>
+                          )}
+                          {TYPE_ICONS[svc.type] && <span>{TYPE_ICONS[svc.type]}</span>}
+                          <span className="truncate">{svc.name}</span>
+                        </span>
+                        <span className="flex items-center gap-2 shrink-0">
+                          {svc.isSpecial ? (
+                            <>
+                              <span className="text-xs text-[#9ca3af] line-through">${fmtRate(svc.publicRate)}/1000</span>
+                              <span className="text-xs font-semibold text-green-600">${fmtRate(svc.rate)}/1000</span>
+                            </>
+                          ) : (
+                            <span className="text-xs font-semibold text-[#111827]">${fmtRate(svc.rate)}/1000</span>
+                          )}
+                        </span>
+                      </div>
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -47,14 +47,12 @@ async def get_current_user(request: Request, db) -> dict:
     Extract and verify JWT token from cookie or Authorization header
     Returns user document if valid
     """
-    # Try cookie first
-    token = request.cookies.get('access_token')
-    
-    # Fallback to Authorization header
+    token = None
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        token = auth_header[7:]
     if not token:
-        auth_header = request.headers.get('Authorization', '')
-        if auth_header.startswith('Bearer '):
-            token = auth_header[7:]
+        token = request.cookies.get('access_token')
     
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")

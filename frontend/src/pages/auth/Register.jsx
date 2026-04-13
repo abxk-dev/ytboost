@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, formatApiError } from '../../context/AuthContext';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -16,6 +16,8 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const { register } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const ref = new URLSearchParams(location.search).get('ref') || '';
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -29,7 +31,7 @@ export default function Register() {
     setLoading(true);
 
     try {
-      await register(name, email, password, confirmPassword);
+      await register(name, email, password, confirmPassword, ref);
       navigate('/dashboard');
     } catch (err) {
       setError(formatApiError(err));

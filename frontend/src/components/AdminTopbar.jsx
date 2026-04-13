@@ -2,11 +2,12 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAdminAuth } from '../context/AdminAuthContext';
 import { useAdminTheme, t } from '../context/AdminThemeContext';
-import { Menu, LogOut, Sun, Moon } from 'lucide-react';
+import { Menu, LogOut, Sun, Moon, User } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from './ui/dropdown-menu';
 
@@ -57,6 +58,14 @@ export default function AdminTopbar({ onMenuClick }) {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className={`w-48 ${c.card} ${c.border}`}>
+            <DropdownMenuItem
+              onClick={() => navigate('/admin/account')}
+              className={`flex items-center gap-2 cursor-pointer ${theme === 'dark' ? 'hover:bg-[#334155] focus:bg-[#334155]' : 'hover:bg-[#e2e8f0] focus:bg-[#e2e8f0]'}`}
+            >
+              <User className="w-4 h-4" />
+              Account
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem 
               onClick={handleLogout}
               className={`flex items-center gap-2 text-red-400 cursor-pointer ${theme === 'dark' ? 'hover:bg-[#334155] focus:bg-[#334155]' : 'hover:bg-[#fee2e2] focus:bg-[#fee2e2]'}`}

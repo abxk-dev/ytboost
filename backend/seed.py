@@ -3,7 +3,7 @@ Database Seed Script
 Seeds initial data for YTBoost.io
 """
 from datetime import datetime, timezone
-from middleware.auth import hash_password
+from backend.middleware.auth import hash_password
 import uuid
 
 async def seed_database(db):
@@ -18,6 +18,10 @@ async def seed_database(db):
             'email': 'admin@ytboost.io',
             'password': hash_password('Admin@123'),
             'role': 'admin',
+            'adminRole': 'superadmin',
+            'twoFactorEnabled': False,
+            'twoFactorSecret': None,
+            'ipWhitelist': [],
             'balance': 0,
             'apiKey': str(uuid.uuid4()),
             'status': 'active',
@@ -35,6 +39,9 @@ async def seed_database(db):
             'role': 'user',
             'balance': 10.00,
             'apiKey': str(uuid.uuid4()),
+            'referralCode': uuid.uuid4().hex[:8].upper(),
+            'referredBy': None,
+            'referralEarnings': 0,
             'status': 'active',
             'createdAt': datetime.now(timezone.utc)
         })
@@ -42,12 +49,12 @@ async def seed_database(db):
     
     # Seed Categories
     categories_data = [
-        {'name': 'YOUTUBE VIEWS', 'slug': 'youtube-views'},
-        {'name': 'YOUTUBE SUBSCRIBERS', 'slug': 'youtube-subscribers'},
-        {'name': 'YOUTUBE LIKES', 'slug': 'youtube-likes'},
-        {'name': 'YOUTUBE WATCH HOURS', 'slug': 'youtube-watch-hours'},
-        {'name': 'YOUTUBE COMMENTS', 'slug': 'youtube-comments'},
-        {'name': 'YOUTUBE SHARES', 'slug': 'youtube-shares'}
+        {'name': 'YOUTUBE VIEWS', 'slug': 'youtube-views', 'order': 1},
+        {'name': 'YOUTUBE SUBSCRIBERS', 'slug': 'youtube-subscribers', 'order': 2},
+        {'name': 'YOUTUBE LIKES', 'slug': 'youtube-likes', 'order': 3},
+        {'name': 'YOUTUBE WATCH HOURS', 'slug': 'youtube-watch-hours', 'order': 4},
+        {'name': 'YOUTUBE COMMENTS', 'slug': 'youtube-comments', 'order': 5},
+        {'name': 'YOUTUBE SHARES', 'slug': 'youtube-shares', 'order': 6}
     ]
     
     category_ids = {}
@@ -61,6 +68,8 @@ async def seed_database(db):
             })
             category_ids[cat_data['slug']] = result.inserted_id
         else:
+            if existing.get('order') is None:
+                await db.categories.update_one({'_id': existing['_id']}, {'$set': {'order': cat_data['order']}})
             category_ids[cat_data['slug']] = existing['_id']
     
     print("✅ Categories seeded")
@@ -124,16 +133,21 @@ async def seed_database(db):
         await db.crypto_payment_methods.insert_one({
             'coinName': 'USDT',
             'network': 'BEP20',
-            'address': '0xYourBSCWalletAddress',
+            'address': '0x981909a9f8a06a7886bc35b393a66da4f4d30622',
             'qrCodeUrl': None,
             'minAmount': 5,
             'instructions': 'Send only USDT on BEP20 (BSC) network. Do not send other coins.',
             'autoDetect': True,
-            'confirmations': 1,
+            'confirmations': 2,
             'status': True,
             'createdAt': datetime.now(timezone.utc)
         })
         print("✅ Crypto payment method seeded")
+    else:
+        await db.crypto_payment_methods.update_one(
+            {'_id': crypto_exists['_id']},
+            {'$set': {'address': '0x981909a9f8a06a7886bc35b393a66da4f4d30622', 'confirmations': 2}}
+        )
     
     # Seed Site Settings
     default_settings = {
@@ -147,7 +161,31 @@ async def seed_database(db):
         'footer_text': '© 2026 YTBoost.io. All rights reserved.',
         'support_email': '',
         'telegram_link': '',
-        'whatsapp_link': ''
+        'whatsapp_link': '',
+        'whatsapp_enabled': 'false',
+        'whatsapp_number': '',
+        'announcement_enabled': 'false',
+        'announcement_message': '',
+        'announcement_type': 'info',
+        'seo_meta_title': 'YTBoost.io',
+        'seo_meta_description': '',
+        'seo_meta_keywords': '',
+        'google_analytics_id': '',
+        'facebook_pixel_id': '',
+        'ip_whitelist_enabled': 'false',
+        'ip_whitelist_ips': '',
+        'auto_complete_enabled': 'false',
+        'auto_complete_hours': '72',
+        'referral_enabled': 'false',
+        'referral_commission_pct': '5',
+        'referral_min_deposit': '0',
+        'public_fake_stats_enabled': 'false',
+        'public_fake_orders_base': '0',
+        'public_fake_users_base': '0',
+        'public_fake_orders_inc_per_hour': '0',
+        'public_fake_users_inc_per_hour': '0',
+        'public_fake_stats_start': '',
+        'public_starting_price': '0.002'
     }
     
     for key, value in default_settings.items():
@@ -164,14 +202,24 @@ async def seed_database(db):
     # Create indexes
     await db.users.create_index('email', unique=True)
     await db.users.create_index('apiKey', unique=True)
+    await db.users.create_index('referralCode', unique=True, sparse=True)
     await db.categories.create_index('slug', unique=True)
     await db.orders.create_index('userId')
     await db.orders.create_index('createdAt')
     await db.transactions.create_index('userId')
+    await db.notifications.create_index('userId')
+    await db.user_activity_logs.create_index([('userId', 1), ('createdAt', -1)])
     await db.crypto_payment_sessions.create_index('userId')
     await db.crypto_payment_sessions.create_index('status')
     await db.crypto_payment_sessions.create_index('expiresAt')
     await db.site_settings.create_index('key', unique=True)
+    await db.support_tickets.create_index([('userId', 1), ('updatedAt', -1)])
+    await db.support_tickets.create_index([('adminUnread', 1), ('updatedAt', -1)])
+    await db.admin_activity_logs.create_index([('createdAt', -1)])
+    await db.admin_activity_logs.create_index([('adminId', 1), ('createdAt', -1)])
+    await db.email_blasts.create_index([('createdAt', -1)])
+    await db.api_call_logs.create_index([('userId', 1), ('createdAt', -1)])
+    await db.api_call_logs.create_index([('createdAt', -1)])
     
     print("✅ Database indexes created")
     print("🎉 Database seed completed!")

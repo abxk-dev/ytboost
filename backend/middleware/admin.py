@@ -12,6 +12,17 @@ from bson import ObjectId
 ADMIN_JWT_SECRET = os.environ.get('ADMIN_JWT_SECRET', 'ytboost_admin_jwt_secret_key_2024')
 JWT_ALGORITHM = "HS256"
 
+def get_request_ip(request: Request) -> str:
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    xri = request.headers.get("x-real-ip", "").strip()
+    if xri:
+        return xri
+    if request.client and request.client.host:
+        return request.client.host
+    return ""
+
 def create_admin_access_token(admin_id: str, email: str) -> str:
     """Create JWT access token for admin (30 min expiry)"""
     payload = {
@@ -37,14 +48,12 @@ async def get_current_admin(request: Request, db) -> dict:
     Extract and verify admin JWT token from cookie or Authorization header
     Returns admin user document if valid
     """
-    # Try cookie first
-    token = request.cookies.get('admin_access_token')
-    
-    # Fallback to Authorization header
+    token = None
+    auth_header = request.headers.get('Authorization', '')
+    if auth_header.startswith('Bearer '):
+        token = auth_header[7:]
     if not token:
-        auth_header = request.headers.get('Authorization', '')
-        if auth_header.startswith('Bearer '):
-            token = auth_header[7:]
+        token = request.cookies.get('admin_access_token')
     
     if not token:
         raise HTTPException(status_code=401, detail="Admin not authenticated")
@@ -58,7 +67,15 @@ async def get_current_admin(request: Request, db) -> dict:
         if payload.get('role') != 'admin':
             raise HTTPException(status_code=403, detail="Admin access required")
         
-        admin = await db.users.find_one({'_id': ObjectId(payload['sub']), 'role': 'admin'})
+        sub = str(payload.get('sub') or '')
+        query = {'role': 'admin'}
+        try:
+            oid = ObjectId(sub)
+            query['_id'] = {'$in': [oid, sub]}
+        except Exception:
+            query['_id'] = sub
+
+        admin = await db.users.find_one(query)
         
         if not admin:
             raise HTTPException(status_code=401, detail="Admin not found")
@@ -66,6 +83,8 @@ async def get_current_admin(request: Request, db) -> dict:
         # Return admin without password and convert _id to string
         admin['_id'] = str(admin['_id'])
         admin.pop('password', None)
+        admin.setdefault('adminRole', 'superadmin')
+        admin.setdefault('twoFactorEnabled', False)
         
         return admin
         
@@ -85,3 +104,23 @@ def verify_admin_refresh_token(token: str) -> dict:
         raise HTTPException(status_code=401, detail="Admin refresh token expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid admin refresh token")
+
+async def log_admin_action(db, request: Request, admin: dict, action: str, details: str = ""):
+    if db is None or not admin:
+        return
+    try:
+        await db.admin_activity_logs.insert_one({
+            'adminId': ObjectId(admin['_id']),
+            'adminName': admin.get('name', ''),
+            'action': action,
+            'details': details,
+            'ipAddress': get_request_ip(request),
+            'createdAt': datetime.now(timezone.utc),
+        })
+    except Exception:
+        return
+
+def require_admin_role(admin: dict, allowed_roles: set[str]):
+    role = admin.get('adminRole') or 'superadmin'
+    if role not in allowed_roles:
+        raise HTTPException(status_code=403, detail="You do not have permission to access this")

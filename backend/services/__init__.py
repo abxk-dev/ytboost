@@ -1,6 +1,6 @@
 # Services package
-from services.wallet_generator import generate_deposit_address, encrypt_private_key, decrypt_private_key
-from services.bep20_monitor import check_bep20_payment, get_usdt_balance
-from services.webhook_processor import credit_payment
-from services.blockchain_scheduler import start_blockchain_scheduler, stop_blockchain_scheduler
-from services.email_service import send_email, send_welcome_email, send_payment_confirmation
+
+from backend.services.bep20_monitor import check_bep20_payment, get_usdt_balance
+from backend.services.webhook_processor import credit_payment
+from backend.services.blockchain_scheduler import start_blockchain_scheduler, stop_blockchain_scheduler
+from backend.services.email_service import send_email, send_welcome_email, send_payment_confirmation

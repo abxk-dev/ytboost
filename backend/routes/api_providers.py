@@ -35,28 +35,64 @@ class ProviderTest(BaseModel):
     apiKey: str
 
 def _provider_response(p):
+    now = datetime.now(timezone.utc)
+    last = p.get('lastTestedAt')
+    if isinstance(last, str) and last:
+        try:
+            last = datetime.fromisoformat(last.replace('Z', '+00:00'))
+        except Exception:
+            last = None
+    if isinstance(last, datetime) and last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    ok = bool(p.get('lastTestOk', True))
+    bal_raw = p.get('lastBalance')
+    bal = None
+    if bal_raw is not None:
+        try:
+            bal = float(bal_raw)
+        except Exception:
+            bal = None
+    stale = (not last) or (isinstance(last, datetime) and (now - last).total_seconds() > 3600)
+    if stale or not ok:
+        health = 'red'
+    elif bal is not None and bal < 10:
+        health = 'yellow'
+    else:
+        health = 'green'
+
     return {
-        'id': str(p['_id']),
-        'name': p['name'],
-        'apiUrl': p['apiUrl'],
+        'id': str(p.get('_id')),
+        'name': p.get('name', ''),
+        'apiUrl': p.get('apiUrl', ''),
         'apiKey': p.get('apiKey', ''),
-        'markup': p.get('markup', 0),
-        'status': p.get('status', True),
-        'lastTestedAt': p.get('lastTestedAt'),
-        'lastBalance': p.get('lastBalance'),
+        'markup': float(p.get('markup', 0) or 0),
+        'status': bool(p.get('status', True)),
+        'lastTestedAt': last,
+        'lastBalance': bal,
+        'lastTestOk': ok,
+        'health': health,
         'createdAt': p.get('createdAt'),
     }
 
 @router.get("/admin/api-providers")
 async def list_providers(request: Request):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
-    providers = await db.api_providers.find({}).to_list(100)
-    return [_provider_response(p) for p in providers]
+    try:
+        providers = await db.api_providers.find({}).to_list(1000)
+        result = []
+        for p in providers:
+            try:
+                result.append(_provider_response(p))
+            except Exception:
+                continue
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Database unavailable: {e}")
 
 @router.post("/admin/api-providers")
 async def create_provider(request: Request, data: ProviderCreate):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
 
     doc = {
@@ -67,15 +103,19 @@ async def create_provider(request: Request, data: ProviderCreate):
         'status': data.status,
         'lastTestedAt': None,
         'lastBalance': None,
+        'lastTestOk': False,
         'createdAt': datetime.now(timezone.utc),
     }
-    result = await db.api_providers.insert_one(doc)
-    doc['_id'] = result.inserted_id
-    return _provider_response(doc)
+    try:
+        result = await db.api_providers.insert_one(doc)
+        doc['_id'] = result.inserted_id
+        return _provider_response(doc)
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Database unavailable: {e}")
 
 @router.put("/admin/api-providers/{provider_id}")
 async def update_provider(request: Request, provider_id: str, data: ProviderUpdate):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
 
     try:
@@ -103,7 +143,7 @@ async def update_provider(request: Request, provider_id: str, data: ProviderUpda
 
 @router.delete("/admin/api-providers/{provider_id}")
 async def delete_provider(request: Request, provider_id: str):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
 
     try:
@@ -124,7 +164,7 @@ async def delete_provider(request: Request, provider_id: str):
 
 @router.post("/admin/api-providers/test")
 async def test_provider(request: Request, data: ProviderTest):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
 
     url = data.apiUrl.rstrip('/')
@@ -146,7 +186,7 @@ async def test_provider(request: Request, data: ProviderTest):
 
 @router.get("/admin/api-providers/{provider_id}/balance")
 async def fetch_balance(request: Request, provider_id: str):
-    from middleware.admin import get_current_admin
+    from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
 
     try:

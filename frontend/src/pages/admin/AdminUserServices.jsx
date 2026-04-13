@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api, { formatApiError } from '../../services/api';
 import { useAdminTheme, t } from '../../context/AdminThemeContext';
@@ -32,7 +32,7 @@ export default function AdminUserServices() {
     note: ''
   });
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const [userRes, servicesRes] = await Promise.all([
         api.get(`/admin/users/${userId}/special-services`),
@@ -46,11 +46,11 @@ export default function AdminUserServices() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId]);
 
   useEffect(() => {
     fetchData();
-  }, [userId]);
+  }, [fetchData]);
 
   const availableServices = allServices.filter(
     svc => !specialServices.find(ss => ss.serviceId === svc.id)
