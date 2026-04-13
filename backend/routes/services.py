@@ -12,6 +12,7 @@ router = APIRouter(tags=["Services"])
 # Request models
 class ServiceCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
+    sid: Optional[int] = None
     categoryId: str
     description: str = ""
     rate: float = Field(..., gt=0)
@@ -35,6 +36,7 @@ class ServiceCreate(BaseModel):
     displaySpeedUnit: str = ""
 
 class ServiceUpdate(BaseModel):
+    sid: Optional[int] = None
     name: Optional[str] = None
     categoryId: Optional[str] = None
     description: Optional[str] = None
@@ -102,6 +104,7 @@ async def get_services():
             'rate': svc['rate'],
             'minQty': svc['minQty'],
             'maxQty': svc['maxQty'],
+            'sid': svc.get('sid'),
             'type': svc.get('type', 'Default'),
             **_service_fields(svc)
         })
@@ -222,6 +225,7 @@ async def admin_get_services(request: Request):
             'rate': svc['rate'],
             'minQty': svc['minQty'],
             'maxQty': svc['maxQty'],
+            'sid': svc.get('sid'),
             'type': svc.get('type', 'Default'),
             'status': svc.get('status', True),
             'createdAt': svc.get('createdAt'),
@@ -291,6 +295,18 @@ async def admin_create_service(request: Request, data: ServiceCreate):
         'createdAt': datetime.now(timezone.utc)
     }
     
+    # Generate unique random 3-digit sid
+    import random
+    for _ in range(100):
+        candidate = random.randint(100, 999)
+        existing = await db.services.find_one({'sid': candidate})
+        if not existing:
+            service_doc['sid'] = candidate
+            break
+    else:
+        # fallback: use timestamp-based
+        service_doc['sid'] = int(datetime.now(timezone.utc).timestamp()) % 900 + 100
+    
     try:
         result = await db.services.insert_one(service_doc)
     except Exception as e:
@@ -298,6 +314,7 @@ async def admin_create_service(request: Request, data: ServiceCreate):
     
     return {
         'id': str(result.inserted_id),
+        'sid': service_doc.get('sid'),
         'name': data.name,
         'categoryId': data.categoryId,
         'categoryName': category['name'],
