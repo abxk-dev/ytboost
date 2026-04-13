@@ -22,3 +22,4 @@ python-socketio==5.11.2
 web3==7.15.0
 eth-account==0.13.7
 pycryptodome==3.23.0
+pyotp
