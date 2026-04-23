@@ -145,7 +145,7 @@ async def check_provider_orders():
                 continue
 
             try:
-                result, _err, _u = await post_smm_api(
+                result, _err, _u, _h = await post_smm_api(
                     provider['apiUrl'],
                     {
                         'key': provider['apiKey'],
@@ -191,7 +191,7 @@ async def check_provider_health():
         now = datetime.now(timezone.utc)
         for p in providers:
             try:
-                result, _err, _u = await post_smm_api(
+                result, _err, _u, _h = await post_smm_api(
                     p['apiUrl'],
                     {'key': p['apiKey'], 'action': 'balance'},
                     timeout=20.0,

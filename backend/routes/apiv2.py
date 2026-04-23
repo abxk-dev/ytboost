@@ -351,29 +351,57 @@ async def api_v2_handler(request: Request):
             fulfillment = service.get("fulfillmentType", "manual")
             provider_name = ""
             provider_order_id = ""
+            provider_error = ""
+            provider_http_status = None
+            provider_response = ""
+            provider_last_attempt = None
             if fulfillment == "auto" and service.get("providerId"):
                 provider = await db.api_providers.find_one({"_id": service["providerId"]})
                 if provider and provider.get("status", True):
                     provider_name = provider.get("name", "")
                     try:
-                        from backend.services.smm_http import post_smm_api
-                        pr, _perr, _u = await post_smm_api(
-                            provider["apiUrl"],
+                        from backend.services.smm_http import post_smm_api, extract_provider_add_order_id, normalize_smm_json_body
+                        provider_last_attempt = datetime.now(timezone.utc)
+                        pr, perr, _u, ph = await post_smm_api(
+                            (provider.get("apiUrl") or "").strip(),
                             {
                                 "key": provider["apiKey"],
                                 "action": "add",
-                                "service": service.get("providerServiceId", ""),
+                                "service": str(service.get("providerServiceId", "") or ""),
                                 "link": link,
                                 "quantity": qty_for_order,
                             },
                             timeout=25.0,
                         )
-                        if isinstance(pr, dict) and "order" in pr:
-                            provider_order_id = str(pr["order"])
-                    except Exception:
-                        pass
+                        if ph is not None:
+                            provider_http_status = ph
+                        if perr:
+                            provider_error = perr
+                        else:
+                            pr = normalize_smm_json_body(pr)
+                            oid = extract_provider_add_order_id(pr)
+                            if oid:
+                                provider_order_id = oid
+                                try:
+                                    rj = pr if isinstance(pr, (dict, list)) else str(pr)
+                                    provider_response = json.dumps(rj, default=str)[:2000] if not isinstance(rj, str) else rj[:2000]
+                                except Exception:
+                                    provider_response = str(pr)[:2000] if pr else ""
+                            elif isinstance(pr, dict):
+                                emsg = pr.get("error") or pr.get("message")
+                                if emsg is not None:
+                                    provider_error = str(emsg)[:2000]
+                                else:
+                                    provider_error = f"No order id in provider response: {str(pr)[:500]}"
+                    except Exception as ex:
+                        _log.debug("apiv2 provider add: %s", ex)
+                        provider_error = str(ex)[:2000]
+                        if provider_last_attempt is None:
+                            provider_last_attempt = datetime.now(timezone.utc)
 
             now = datetime.now(timezone.utc)
+            if provider_error and not provider_response:
+                provider_response = provider_error[:2000]
             jap_id = await get_next_jap_order_number(db)
             order_doc = {
                 "userId": user_id,
@@ -391,6 +419,10 @@ async def api_v2_handler(request: Request):
                 "fulfillmentType": fulfillment,
                 "providerName": provider_name,
                 "providerOrderId": provider_order_id,
+                "providerError": provider_error,
+                "providerHttpStatus": provider_http_status,
+                "providerResponse": provider_response,
+                "providerLastAttemptAt": provider_last_attempt,
                 "refillHistory": [],
                 "viaApi": True,
                 "createdAt": now,

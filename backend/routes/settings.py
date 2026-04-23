@@ -190,7 +190,7 @@ async def _refresh_provider_balances_if_needed():
                     )
                     continue
 
-                result, _err, _u = await post_smm_api(api_url, {"key": api_key, "action": "balance"}, timeout=20.0)
+                result, _err, _u, _st = await post_smm_api(api_url, {"key": api_key, "action": "balance"}, timeout=20.0)
                 if isinstance(result, dict) and "balance" in result:
                     try:
                         balance = float(result["balance"])

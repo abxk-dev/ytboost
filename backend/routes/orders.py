@@ -11,6 +11,9 @@ import logging
 logger = logging.getLogger(__name__)
 from typing import Optional
 import re
+import json
+
+from backend.smm.jap_v2 import jap_service_number
 
 router = APIRouter(tags=["Orders"])
 
@@ -33,6 +36,10 @@ class BulkOrderAction(BaseModel):
 
 class OrderNoteUpdate(BaseModel):
     note: str = ""
+
+class ProviderOverrideUpdate(BaseModel):
+    """Set provider’s order id when the order was created on the upstream panel outside YTBoost, or to fix a failed auto-send record."""
+    providerOrderId: str = Field(..., min_length=1, max_length=80)
 
 # Dependency injection placeholder
 db = None
@@ -126,27 +133,41 @@ async def create_order(request: Request, data: OrderCreate):
             provider_name = provider['name']
             # Auto-send to provider
             try:
-                from backend.services.smm_http import post_smm_api
+                from backend.services.smm_http import post_smm_api, extract_provider_add_order_id, normalize_smm_json_body
                 provider_last_attempt_at = datetime.now(timezone.utc)
-                result, perr, _u = await post_smm_api(
+                result, perr, _u, p_http = await post_smm_api(
                     (provider.get("apiUrl") or "").strip(),
                     {
                         "key": provider["apiKey"],
                         "action": "add",
-                        "service": service.get("providerServiceId", ""),
+                        "service": str(service.get("providerServiceId", "") or ""),
                         "link": data.link,
                         "quantity": data.quantity,
                     },
                     timeout=25.0,
                 )
+                if p_http is not None:
+                    provider_http_status = p_http
                 if perr:
                     provider_error = perr
-                elif isinstance(result, dict) and "order" in result:
-                    provider_order_id = str(result["order"])
-                elif isinstance(result, dict):
-                    provider_error = str(result.get("error") or result.get("message") or result)
                 else:
-                    provider_error = "Invalid response from provider"
+                    result = normalize_smm_json_body(result)
+                    oid = extract_provider_add_order_id(result)
+                    if oid:
+                        provider_order_id = oid
+                        try:
+                            rj = result if isinstance(result, (dict, list)) else {"_": str(result)}
+                            provider_response = json.dumps(rj, default=str)[:2000]
+                        except Exception:
+                            provider_response = str(result)[:2000]
+                    elif isinstance(result, dict):
+                        err = result.get("error") or result.get("message")
+                        if err is not None:
+                            provider_error = str(err)[:2000]
+                        else:
+                            provider_error = f"No order id in provider response: {str(result)[:500]}"
+                    else:
+                        provider_error = "Invalid response from provider (not a JSON object)"
             except Exception as e:
                 provider_last_attempt_at = datetime.now(timezone.utc)
                 provider_error = str(e)
@@ -390,6 +411,7 @@ async def admin_get_orders(request: Request, page: int = 1, limit: int = 50, sta
             'userEmail': user['email'] if user else 'Unknown',
             'serviceId': str(order['serviceId']),
             'serviceName': service['name'] if service else 'Unknown',
+            'serviceNumber': jap_service_number(service) if service else None,
             'serviceType': order.get('serviceType', service.get('type', 'Default') if service else 'Default'),
             'link': order['link'],
             'quantity': order['quantity'],
@@ -462,7 +484,7 @@ async def admin_bulk_order_action(request: Request, data: BulkOrderAction):
     updated = 0
     resend = 0
 
-    from backend.services.smm_http import post_smm_api
+    from backend.services.smm_http import post_smm_api, extract_provider_add_order_id, normalize_smm_json_body
     for oid in data.orderIds:
         try:
             obj_id = ObjectId(oid)
@@ -481,49 +503,94 @@ async def admin_bulk_order_action(request: Request, data: BulkOrderAction):
             if not provider or not provider.get('status', True):
                 continue
             try:
-                result, perr, _u = await post_smm_api(
-                    provider["apiUrl"],
+                result, perr, _tried, pstatus = await post_smm_api(
+                    (provider.get("apiUrl") or "").strip(),
                     {
                         "key": provider["apiKey"],
                         "action": "add",
-                        "service": service.get("providerServiceId", ""),
+                        "service": str(service.get("providerServiceId", "") or ""),
                         "link": order.get("link", ""),
-                        "quantity": order.get("quantity", 0),
+                        "quantity": int(order.get("quantity") or 0),
                     },
                     timeout=25.0,
                 )
-                if perr or not isinstance(result, dict):
+                now = datetime.now(timezone.utc)
+                if perr:
+                    await db.orders.update_one(
+                        {'_id': obj_id},
+                        {'$set': {
+                            'providerError': perr,
+                            'providerName': provider.get('name', ''),
+                            'providerHttpStatus': pstatus,
+                            'providerResponse': perr[:2000],
+                            'providerLastAttemptAt': now,
+                        }}
+                    )
                     continue
-                new_provider_order_id = str(result.get("order", ""))
-                if new_provider_order_id:
+                result = normalize_smm_json_body(result)
+                if not isinstance(result, dict) and not isinstance(result, list):
+                    await db.orders.update_one(
+                        {'_id': obj_id},
+                        {'$set': {
+                            'providerError': 'Invalid response from provider',
+                            'providerName': provider.get('name', ''),
+                            'providerHttpStatus': pstatus,
+                            'providerResponse': 'Non-object JSON from provider',
+                            'providerLastAttemptAt': now,
+                        }}
+                    )
+                    continue
+                ext_id = extract_provider_add_order_id(result)
+                if ext_id and ext_id != "None":
+                    new_provider_order_id = ext_id
+                else:
+                    new_provider_order_id = ""
+                if new_provider_order_id and new_provider_order_id != "None":
+                    try:
+                        rtxt = json.dumps(result, default=str)[:2000]
+                    except Exception:
+                        rtxt = str(result)[:2000]
                     await db.orders.update_one(
                         {'_id': obj_id},
                         {'$set': {
                             'providerOrderId': new_provider_order_id,
                             'providerName': provider.get('name', ''),
                             'providerError': '',
-                            'providerHttpStatus': resp.status_code,
-                            'providerResponse': (resp.text or '')[:2000],
-                            'providerLastAttemptAt': datetime.now(timezone.utc),
+                            'providerHttpStatus': pstatus,
+                            'providerResponse': rtxt,
+                            'providerLastAttemptAt': now,
                         }}
                     )
                     resend += 1
                 else:
+                    if isinstance(result, dict):
+                        em = str(
+                            result.get("error")
+                            or result.get("message")
+                            or "Provider did not return order id"
+                        )[:2000]
+                    else:
+                        em = f"Provider did not return order id: {str(result)[:500]}"
+                    try:
+                        pre = json.dumps(result, default=str)[:2000]
+                    except Exception:
+                        pre = str(result)[:2000] if result else em
                     await db.orders.update_one(
                         {'_id': obj_id},
                         {'$set': {
-                            'providerError': str(result.get('error') or result.get('message') or result),
-                            'providerHttpStatus': resp.status_code,
-                            'providerResponse': (resp.text or '')[:2000],
-                            'providerLastAttemptAt': datetime.now(timezone.utc),
+                            'providerError': em,
+                            'providerName': provider.get('name', ''),
+                            'providerHttpStatus': pstatus,
+                            'providerResponse': pre,
+                            'providerLastAttemptAt': now,
                         }}
                     )
-            except Exception:
+            except Exception as ex:
                 try:
                     await db.orders.update_one(
                         {'_id': obj_id},
                         {'$set': {
-                            'providerError': 'Provider request failed',
+                            'providerError': f'Resend error: {str(ex)[:1000]}',
                             'providerLastAttemptAt': datetime.now(timezone.utc),
                         }}
                     )
@@ -555,6 +622,41 @@ async def admin_update_order_note(request: Request, order_id: str, data: OrderNo
     await db.orders.update_one({'_id': obj_id}, {'$set': {'note': data.note}})
     await log_admin_action(db, request, admin, "ORDER_NOTE_UPDATED", f"Order: {order_id}")
     return {'message': 'Note saved'}
+
+@router.put("/admin/orders/{order_id}/provider-override")
+async def admin_set_provider_order_id(
+    request: Request, order_id: str, data: ProviderOverrideUpdate
+):
+    """Link this order to an existing provider order id; clears stale providerError."""
+    from backend.middleware.admin import get_current_admin, log_admin_action, require_admin_role
+    admin = await get_current_admin(request, db)
+    require_admin_role(admin, {"superadmin", "manager", "support"})
+    try:
+        obj_id = ObjectId(order_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid order ID")
+    order = await db.orders.find_one({"_id": obj_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    clean = (data.providerOrderId or "").strip()
+    if not clean:
+        raise HTTPException(status_code=400, detail="providerOrderId is required")
+    now = datetime.now(timezone.utc)
+    await db.orders.update_one(
+        {"_id": obj_id},
+        {
+            "$set": {
+                "providerOrderId": clean,
+                "providerError": "",
+                "providerResponse": "Provider order id set manually in admin",
+                "providerLastAttemptAt": now,
+            }
+        },
+    )
+    await log_admin_action(
+        db, request, admin, "ORDER_PROVIDER_OVERRIDDEN", f"Order: {order_id} → {clean[:40]}"
+    )
+    return {"message": "Provider order id saved", "providerOrderId": clean}
 
 @router.post("/admin/orders/{order_id}/cancel-refund")
 async def admin_cancel_refund(request: Request, order_id: str):

@@ -167,7 +167,7 @@ async def test_provider(request: Request, data: ProviderTest):
     from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
 
-    result, err, _tried = await post_smm_api(
+    result, err, _tried, _h = await post_smm_api(
         data.apiUrl.rstrip("/"),
         {"key": data.apiKey, "action": "balance"},
     )
@@ -196,7 +196,7 @@ async def fetch_balance(request: Request, provider_id: str):
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
 
-    result, err, _tried = await post_smm_api(
+    result, err, _tried, _h = await post_smm_api(
         (provider.get("apiUrl") or "").rstrip("/"),
         {"key": provider.get("apiKey", ""), "action": "balance"},
     )

@@ -7,6 +7,7 @@ import { Badge } from '../../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog';
 import { Label } from '../../components/ui/label';
+import { Input } from '../../components/ui/input';
 import { Checkbox } from '../../components/ui/checkbox';
 import { Loader2, ShoppingCart, ChevronLeft, ChevronRight, ExternalLink, ChevronDown, RefreshCw, StickyNote, Ban, Download } from 'lucide-react';
 import { toast } from 'sonner';
@@ -34,6 +35,9 @@ export default function AdminOrders() {
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [cancelOrder, setCancelOrder] = useState(null);
   const [cancelWorking, setCancelWorking] = useState(false);
+  const [providerIdDraft, setProviderIdDraft] = useState('');
+  const [providerOverrideSaving, setProviderOverrideSaving] = useState(false);
+  const [resendOneId, setResendOneId] = useState(null);
 
   const statusColors = {
     Pending: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
@@ -62,6 +66,15 @@ export default function AdminOrders() {
   }, [page, statusFilter]);
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
+
+  useEffect(() => {
+    if (!expandedRow) {
+      setProviderIdDraft('');
+      return;
+    }
+    const o = orders.find((x) => x.id === expandedRow);
+    setProviderIdDraft(o?.providerOrderId != null && o?.providerOrderId !== '' ? String(o.providerOrderId) : '');
+  }, [expandedRow, orders]);
 
   const openStatusDialog = (order) => {
     setSelectedOrder(order);
@@ -170,6 +183,42 @@ export default function AdminOrders() {
     }
   };
 
+  const saveProviderOverride = async (order) => {
+    if (!String(providerIdDraft).trim()) {
+      toast.error('Enter the provider order id from the upstream panel');
+      return;
+    }
+    setProviderOverrideSaving(true);
+    try {
+      await api.put(`/admin/orders/${order.id}/provider-override`, {
+        providerOrderId: String(providerIdDraft).trim(),
+      });
+      toast.success('Provider order id saved; error cleared');
+      await fetchOrders();
+    } catch (e) {
+      toast.error(formatApiError(e));
+    } finally {
+      setProviderOverrideSaving(false);
+    }
+  };
+
+  const resendToProvider = async (order) => {
+    setResendOneId(order.id);
+    try {
+      const { data } = await api.post('/admin/orders/bulk-action', { orderIds: [order.id], action: 'resend' });
+      if ((data.resent || 0) < 1) {
+        toast.error('Resend did not create a provider order. Check API URL, key, and “Provider service id” on the product.');
+      } else {
+        toast.success('Order sent to provider');
+      }
+      await fetchOrders();
+    } catch (e) {
+      toast.error(formatApiError(e));
+    } finally {
+      setResendOneId(null);
+    }
+  };
+
   const openCancelDialog = (order) => {
     setCancelOrder(order);
     setCancelDialogOpen(true);
@@ -263,7 +312,12 @@ export default function AdminOrders() {
                             <p className={`text-xs ${c.textMuted}`}>{order.userEmail}</p>
                           </div>
                         </td>
-                        <td className={`py-4 px-4 text-sm ${c.textSecondary} max-w-[150px] truncate`}>{order.serviceName}</td>
+                        <td className={`py-4 px-4 text-sm ${c.textSecondary} max-w-[150px] truncate`} title={order.serviceNumber != null ? `Service id: ${order.serviceNumber}` : undefined}>
+                          {order.serviceName}
+                          {order.serviceNumber != null && (
+                            <span className="ml-1.5 text-[10px] font-mono text-[#7c3aed] align-middle">·{order.serviceNumber}</span>
+                          )}
+                        </td>
                         <td className="py-4 px-4">
                           <a href={order.link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-sm text-[#7c3aed] hover:text-[#8b5cf6]">
                             <span className="truncate max-w-[100px]">{order.link.slice(0, 20)}...</span>
@@ -329,12 +383,62 @@ export default function AdminOrders() {
                               </div>
                               <div>
                                 <p className={`font-medium ${c.text} mb-1`}>Provider Order ID</p>
-                                <p className={`${c.textSecondary} font-mono`}>{order.providerOrderId || '-'}</p>
+                                <p className={`${c.textSecondary} font-mono`}>{order.providerOrderId || '—'}</p>
                               </div>
+                              {order.serviceNumber != null && (
+                                <div>
+                                  <p className={`font-medium ${c.text} mb-1`}>YTBoost / panel service id</p>
+                                  <p className={`${c.textSecondary} font-mono`}>{order.serviceNumber}</p>
+                                </div>
+                              )}
                               {order.fulfillmentType === 'auto' && !order.providerOrderId && (
                                 <div className="col-span-2">
                                   <p className={`font-medium ${c.text} mb-1`}>Provider Error</p>
                                   <p className="text-red-400">{order.providerError || order.providerErrorComputed || 'Order not sent to provider yet'}</p>
+                                </div>
+                              )}
+                              {order.fulfillmentType === 'auto' && order.providerOrderId && (order.providerError || order.providerErrorComputed) && (
+                                <div className="col-span-2">
+                                  <p className={`font-medium ${c.text} mb-1`}>Previous error (cleared on next save; safe to ignore if linked above)</p>
+                                  <p className={`${c.textMuted} text-xs`}>{order.providerError || order.providerErrorComputed}</p>
+                                </div>
+                              )}
+                              {order.fulfillmentType === 'auto' && (
+                                <div className="col-span-2 space-y-2 pt-3 border-t border-dashed border-[#4b5563]/40">
+                                  <p className={`text-xs ${c.textMuted}`}>
+                            If the order was already created on the upstream (provider) panel, paste that panel’s <strong>order id</strong> here and save — the red error is cleared and this row stays linked. Use <strong>Resend to provider</strong> only to create a <em>new</em> order on the API (duplicates the order there).
+                                  </p>
+                                  <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2 sm:items-end">
+                                    <div className="flex-1 min-w-[200px] max-w-sm">
+                                      <Label className={c.textSecondary}>Set / fix provider order id</Label>
+                                      <Input
+                                        value={providerIdDraft}
+                                        onChange={(e) => setProviderIdDraft(e.target.value)}
+                                        placeholder="e.g. 1234567"
+                                        className="mt-1 h-9 font-mono"
+                                      />
+                                    </div>
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      onClick={() => saveProviderOverride(order)}
+                                      disabled={providerOverrideSaving}
+                                      className="h-9 bg-[#7c3aed] hover:bg-[#8b5cf6] text-white"
+                                    >
+                                      {providerOverrideSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save provider id'}
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-9"
+                                      onClick={() => resendToProvider(order)}
+                                      disabled={resendOneId === order.id}
+                                      title="Calls provider API to create a new order (may duplicate if you already created one)"
+                                    >
+                                      {resendOneId === order.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <><RefreshCw className="h-4 w-4 mr-1" />Resend to provider</>}
+                                    </Button>
+                                  </div>
                                 </div>
                               )}
                               {(order.providerHttpStatus || order.providerResponse) && (
