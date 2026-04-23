@@ -117,7 +117,7 @@ async def check_provider_orders():
         return
 
     try:
-        import httpx
+        from backend.services.smm_http import post_smm_api
 
         orders = await db_instance.orders.find({
             'fulfillmentType': 'auto',
@@ -145,13 +145,17 @@ async def check_provider_orders():
                 continue
 
             try:
-                async with httpx.AsyncClient(timeout=10) as client:
-                    resp = await client.post(provider['apiUrl'], data={
+                result, _err, _u = await post_smm_api(
+                    provider['apiUrl'],
+                    {
                         'key': provider['apiKey'],
                         'action': 'status',
                         'order': order['providerOrderId'],
-                    })
-                    result = resp.json()
+                    },
+                    timeout=20.0,
+                )
+                if _err or not isinstance(result, dict):
+                    continue
 
                 new_status = STATUS_MAP.get(result.get('status', ''))
                 if not new_status or new_status == order['status']:
@@ -180,32 +184,34 @@ async def check_provider_health():
     if db_instance is None:
         return
     try:
-        import httpx
+        from backend.services.smm_http import post_smm_api
         providers = await db_instance.api_providers.find({'status': True}).to_list(200)
         if not providers:
             return
         now = datetime.now(timezone.utc)
-        async with httpx.AsyncClient(timeout=10) as client:
-            for p in providers:
-                try:
-                    resp = await client.post(p['apiUrl'], data={'key': p['apiKey'], 'action': 'balance'})
-                    result = resp.json()
-                    if 'balance' in result:
-                        balance = float(result['balance'])
-                        await db_instance.api_providers.update_one(
-                            {'_id': p['_id']},
-                            {'$set': {'lastBalance': balance, 'lastTestedAt': now, 'lastTestOk': True}}
-                        )
-                    else:
-                        await db_instance.api_providers.update_one(
-                            {'_id': p['_id']},
-                            {'$set': {'lastTestedAt': now, 'lastTestOk': False}}
-                        )
-                except Exception:
+        for p in providers:
+            try:
+                result, _err, _u = await post_smm_api(
+                    p['apiUrl'],
+                    {'key': p['apiKey'], 'action': 'balance'},
+                    timeout=20.0,
+                )
+                if _err or not isinstance(result, dict) or 'balance' not in result:
                     await db_instance.api_providers.update_one(
                         {'_id': p['_id']},
                         {'$set': {'lastTestedAt': now, 'lastTestOk': False}}
                     )
+                    continue
+                balance = float(result['balance'])
+                await db_instance.api_providers.update_one(
+                    {'_id': p['_id']},
+                    {'$set': {'lastBalance': balance, 'lastTestedAt': now, 'lastTestOk': True}}
+                )
+            except Exception:
+                await db_instance.api_providers.update_one(
+                    {'_id': p['_id']},
+                    {'$set': {'lastTestedAt': now, 'lastTestOk': False}}
+                )
     except Exception as e:
         print(f"Provider health check error: {e}")
 

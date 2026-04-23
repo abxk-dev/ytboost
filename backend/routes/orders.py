@@ -126,30 +126,27 @@ async def create_order(request: Request, data: OrderCreate):
             provider_name = provider['name']
             # Auto-send to provider
             try:
-                import httpx
-                async with httpx.AsyncClient(timeout=15) as client_http:
-                    provider_last_attempt_at = datetime.now(timezone.utc)
-                    resp = await client_http.post((provider.get('apiUrl') or '').strip(), data={
-                        'key': provider['apiKey'],
-                        'action': 'add',
-                        'service': service.get('providerServiceId', ''),
-                        'link': data.link,
-                        'quantity': data.quantity,
-                    })
-                    provider_http_status = resp.status_code
-                    raw_text = resp.text
-                    provider_response = raw_text[:2000] if isinstance(raw_text, str) else ''
-                    try:
-                        result = resp.json()
-                    except Exception:
-                        result = None
-
-                    if isinstance(result, dict) and 'order' in result:
-                        provider_order_id = str(result['order'])
-                    elif isinstance(result, dict):
-                        provider_error = str(result.get('error') or result.get('message') or result)
-                    else:
-                        provider_error = provider_response or f"Provider returned HTTP {provider_http_status}"
+                from backend.services.smm_http import post_smm_api
+                provider_last_attempt_at = datetime.now(timezone.utc)
+                result, perr, _u = await post_smm_api(
+                    (provider.get("apiUrl") or "").strip(),
+                    {
+                        "key": provider["apiKey"],
+                        "action": "add",
+                        "service": service.get("providerServiceId", ""),
+                        "link": data.link,
+                        "quantity": data.quantity,
+                    },
+                    timeout=25.0,
+                )
+                if perr:
+                    provider_error = perr
+                elif isinstance(result, dict) and "order" in result:
+                    provider_order_id = str(result["order"])
+                elif isinstance(result, dict):
+                    provider_error = str(result.get("error") or result.get("message") or result)
+                else:
+                    provider_error = "Invalid response from provider"
             except Exception as e:
                 provider_last_attempt_at = datetime.now(timezone.utc)
                 provider_error = str(e)
@@ -158,6 +155,9 @@ async def create_order(request: Request, data: OrderCreate):
             provider_error = "Provider not found or disabled"
     elif fulfillment == 'auto':
         provider_error = "Service is set to auto fulfillment but provider is not configured"
+
+    if provider_error:
+        provider_response = provider_error[:2000]
 
     order_doc = {
         'userId': user_id,
@@ -462,7 +462,7 @@ async def admin_bulk_order_action(request: Request, data: BulkOrderAction):
     updated = 0
     resend = 0
 
-    import httpx
+    from backend.services.smm_http import post_smm_api
     for oid in data.orderIds:
         try:
             obj_id = ObjectId(oid)
@@ -481,16 +481,20 @@ async def admin_bulk_order_action(request: Request, data: BulkOrderAction):
             if not provider or not provider.get('status', True):
                 continue
             try:
-                async with httpx.AsyncClient(timeout=15) as client_http:
-                    resp = await client_http.post(provider['apiUrl'], data={
-                        'key': provider['apiKey'],
-                        'action': 'add',
-                        'service': service.get('providerServiceId', ''),
-                        'link': order.get('link', ''),
-                        'quantity': order.get('quantity', 0),
-                    })
-                    result = resp.json()
-                new_provider_order_id = str(result.get('order', ''))
+                result, perr, _u = await post_smm_api(
+                    provider["apiUrl"],
+                    {
+                        "key": provider["apiKey"],
+                        "action": "add",
+                        "service": service.get("providerServiceId", ""),
+                        "link": order.get("link", ""),
+                        "quantity": order.get("quantity", 0),
+                    },
+                    timeout=25.0,
+                )
+                if perr or not isinstance(result, dict):
+                    continue
+                new_provider_order_id = str(result.get("order", ""))
                 if new_provider_order_id:
                     await db.orders.update_one(
                         {'_id': obj_id},

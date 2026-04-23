@@ -117,6 +117,18 @@ app.include_router(communications.router, prefix="/api")
 async def root():
     return {"message": "YTBoost API"}
 
+
+@app.get("/api/health")
+async def public_health():
+    try:
+        await db.command("ping")
+        return {"status": "healthy", "db": "ok"}
+    except Exception as e:
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unhealthy", "detail": str(e)},
+        )
+
 # Startup
 @app.on_event("startup")
 async def startup():

@@ -7,7 +7,6 @@ from bson import ObjectId
 import os
 import shutil
 import uuid
-import httpx
 from backend.middleware.admin import get_request_ip
 
 router = APIRouter(tags=["Settings"])
@@ -179,39 +178,38 @@ async def _refresh_provider_balances_if_needed():
                 to_refresh.append(p)
         if not to_refresh:
             return
-        async with httpx.AsyncClient(timeout=10) as client_http:
-            for p in to_refresh:
-                try:
-                    api_url = (p.get('apiUrl') or '').strip()
-                    api_key = p.get('apiKey') or ''
-                    if not api_url or not api_key:
-                        await db.api_providers.update_one(
-                            {'_id': p['_id']},
-                            {'$set': {'lastTestedAt': now, 'lastTestOk': False}}
-                        )
-                        continue
-
-                    resp = await client_http.post(api_url, data={'key': api_key, 'action': 'balance'})
-                    result = resp.json()
-                    if 'balance' in result:
-                        try:
-                            balance = float(result['balance'])
-                        except Exception:
-                            balance = None
-                        await db.api_providers.update_one(
-                            {'_id': p['_id']},
-                            {'$set': {'lastBalance': balance, 'lastTestedAt': now, 'lastTestOk': balance is not None}}
-                        )
-                    else:
-                        await db.api_providers.update_one(
-                            {'_id': p['_id']},
-                            {'$set': {'lastTestedAt': now, 'lastTestOk': False}}
-                        )
-                except Exception:
+        from backend.services.smm_http import post_smm_api
+        for p in to_refresh:
+            try:
+                api_url = (p.get("apiUrl") or "").strip()
+                api_key = p.get("apiKey") or ""
+                if not api_url or not api_key:
                     await db.api_providers.update_one(
-                        {'_id': p['_id']},
-                        {'$set': {'lastTestedAt': now, 'lastTestOk': False}}
+                        {"_id": p["_id"]},
+                        {"$set": {"lastTestedAt": now, "lastTestOk": False}}
                     )
+                    continue
+
+                result, _err, _u = await post_smm_api(api_url, {"key": api_key, "action": "balance"}, timeout=20.0)
+                if isinstance(result, dict) and "balance" in result:
+                    try:
+                        balance = float(result["balance"])
+                    except Exception:
+                        balance = None
+                    await db.api_providers.update_one(
+                        {"_id": p["_id"]},
+                        {"$set": {"lastBalance": balance, "lastTestedAt": now, "lastTestOk": balance is not None}}
+                    )
+                else:
+                    await db.api_providers.update_one(
+                        {"_id": p["_id"]},
+                        {"$set": {"lastTestedAt": now, "lastTestOk": False}}
+                    )
+            except Exception:
+                await db.api_providers.update_one(
+                    {"_id": p["_id"]},
+                    {"$set": {"lastTestedAt": now, "lastTestOk": False}}
+                )
     except Exception as e:
         print(f"[admin/stats/overview] provider refresh failed: {e}")
 

@@ -2,6 +2,7 @@
 API v2 Routes - Reseller API
 Compatible with common SMM panel POST APIs (e.g. Just Another Panel /api/v2 style).
 """
+import logging
 from fastapi import APIRouter, Request
 from datetime import datetime, timezone
 from bson import ObjectId
@@ -149,6 +150,13 @@ async def _find_user_by_api_key(key: str):
         return None
     return u
 
+_log = logging.getLogger(__name__)
+
+@router.get("/v2/health")
+async def api_v2_health():
+    """Public: load balancers / external panels can probe without a key."""
+    return {"ok": True, "v": 2}
+
 @router.api_route("/v2", methods=["GET", "POST", "PUT"])
 @router.api_route("/v2/", methods=["GET", "POST", "PUT"])
 async def api_v2_handler(request: Request):
@@ -164,16 +172,19 @@ async def api_v2_handler(request: Request):
     """
     t0 = perf_counter()
     ip = get_request_ip(request)
-    body = _merge_query_params(request, await _read_body(request))
-    action = _extract_action(body)
-    key = _extract_key(body)
-
     user = None
     user_id = None
     http_status = 200
+    action = ""
+    key = ""
+    body: dict = {}
     response = _err("Incorrect request")
 
     try:
+        body = _merge_query_params(request, await _read_body(request))
+        action = _extract_action(body)
+        key = _extract_key(body)
+
         if not action:
             response = _err("Incorrect request")
             return response
@@ -297,18 +308,20 @@ async def api_v2_handler(request: Request):
                 if provider and provider.get("status", True):
                     provider_name = provider.get("name", "")
                     try:
-                        import httpx
-                        async with httpx.AsyncClient(timeout=15) as client_http:
-                            resp = await client_http.post(provider["apiUrl"], data={
+                        from backend.services.smm_http import post_smm_api
+                        pr, _perr, _u = await post_smm_api(
+                            provider["apiUrl"],
+                            {
                                 "key": provider["apiKey"],
                                 "action": "add",
                                 "service": service.get("providerServiceId", ""),
                                 "link": link,
                                 "quantity": qty_for_order,
-                            })
-                            provider_result = resp.json()
-                            if "order" in provider_result:
-                                provider_order_id = str(provider_result["order"])
+                            },
+                            timeout=25.0,
+                        )
+                        if isinstance(pr, dict) and "order" in pr:
+                            provider_order_id = str(pr["order"])
                     except Exception:
                         pass
 
@@ -388,6 +401,9 @@ async def api_v2_handler(request: Request):
 
         response = _err("Incorrect request")
         return response
+    except Exception as exc:
+        _log.exception("apiv2 handler: %s", exc)
+        response = _err("Service temporarily unavailable")
     finally:
         try:
             elapsed_ms = int((perf_counter() - t0) * 1000)
@@ -403,3 +419,4 @@ async def api_v2_handler(request: Request):
             await db.api_call_logs.insert_one(log_doc)
         except Exception:
             pass
+    return response

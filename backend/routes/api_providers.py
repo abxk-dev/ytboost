@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime, timezone
 from bson import ObjectId
-import httpx
+from backend.services.smm_http import post_smm_api
 
 router = APIRouter(tags=["API Providers"])
 
@@ -167,22 +167,20 @@ async def test_provider(request: Request, data: ProviderTest):
     from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
 
-    url = data.apiUrl.rstrip('/')
-    try:
-        async with httpx.AsyncClient(timeout=10) as client_http:
-            resp = await client_http.post(url, data={'key': data.apiKey, 'action': 'balance'})
-            result = resp.json()
-
-        if 'balance' in result:
-            return {'success': True, 'balance': float(result['balance'])}
-        elif 'error' in result:
-            return {'success': False, 'error': result['error']}
-        else:
-            return {'success': False, 'error': 'Unexpected response from provider'}
-    except httpx.TimeoutException:
-        return {'success': False, 'error': 'Connection timed out'}
-    except Exception as e:
-        return {'success': False, 'error': str(e)}
+    result, err, _tried = await post_smm_api(
+        data.apiUrl.rstrip("/"),
+        {"key": data.apiKey, "action": "balance"},
+    )
+    if err and result is None:
+        return {"success": False, "error": err}
+    if isinstance(result, dict) and "balance" in result:
+        try:
+            return {"success": True, "balance": float(result["balance"])}
+        except (TypeError, ValueError):
+            return {"success": False, "error": "Invalid balance in response"}
+    if isinstance(result, dict) and "error" in result:
+        return {"success": False, "error": str(result["error"])}
+    return {"success": False, "error": "Unexpected response from provider"}
 
 @router.get("/admin/api-providers/{provider_id}/balance")
 async def fetch_balance(request: Request, provider_id: str):
@@ -198,19 +196,22 @@ async def fetch_balance(request: Request, provider_id: str):
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
 
-    try:
-        async with httpx.AsyncClient(timeout=10) as client_http:
-            resp = await client_http.post(provider['apiUrl'], data={'key': provider['apiKey'], 'action': 'balance'})
-            result = resp.json()
-
-        if 'balance' in result:
-            balance = float(result['balance'])
-            await db.api_providers.update_one(
-                {'_id': obj_id},
-                {'$set': {'lastBalance': balance, 'lastTestedAt': datetime.now(timezone.utc)}}
-            )
-            return {'success': True, 'balance': balance}
-        else:
-            return {'success': False, 'error': result.get('error', 'Unknown error')}
-    except Exception as e:
-        return {'success': False, 'error': str(e)}
+    result, err, _tried = await post_smm_api(
+        (provider.get("apiUrl") or "").rstrip("/"),
+        {"key": provider.get("apiKey", ""), "action": "balance"},
+    )
+    if err and result is None:
+        return {"success": False, "error": err}
+    if isinstance(result, dict) and "balance" in result:
+        try:
+            balance = float(result["balance"])
+        except (TypeError, ValueError):
+            return {"success": False, "error": "Invalid balance in response"}
+        await db.api_providers.update_one(
+            {"_id": obj_id},
+            {"$set": {"lastBalance": balance, "lastTestedAt": datetime.now(timezone.utc)}}
+        )
+        return {"success": True, "balance": balance}
+    if isinstance(result, dict) and result.get("error") is not None:
+        return {"success": False, "error": str(result.get("error", "Unknown error"))}
+    return {"success": False, "error": "Unexpected response from provider"}
