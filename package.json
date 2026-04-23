@@ -4,9 +4,9 @@
   "description": "Full stack app",
   "main": "index.js",
   "scripts": {
-    "dev": "concurrently \"cd backend && python3 server.py\" \"cd frontend && npm start\"",
+    "dev": "concurrently \"python3 -m uvicorn backend.server:application --host 0.0.0.0 --port 8000\" \"cd frontend && npm start\"",
     "frontend": "cd frontend && npm start",
-    "backend": "cd backend && python3 server.py"
+    "backend": "python3 -m uvicorn backend.server:application --host 0.0.0.0 --port 8000"
   },
   "keywords": [],
   "author": "",

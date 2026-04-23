@@ -1,11 +1,14 @@
 """
 API v2 Routes - Reseller API
+Compatible with common SMM panel POST APIs (e.g. Just Another Panel /api/v2 style).
 """
 from fastapi import APIRouter, Request
 from datetime import datetime, timezone
 from bson import ObjectId
 import re
+import json
 from time import perf_counter
+from urllib.parse import parse_qs, unquote_plus
 from pymongo import ReturnDocument
 from backend.middleware.admin import get_request_ip
 
@@ -37,22 +40,86 @@ def _ok(result):
 def _err(message: str):
     return {"error": message}
 
+def _normalize_form_value(v) -> str:
+    if v is None:
+        return ""
+    if hasattr(v, "read"):
+        return ""
+    return str(v).strip()
+
+def _extract_key(body: dict) -> str:
+    """SMM panels vary: key, apikey, api_key, or query-only."""
+    for name in (
+        "key", "Key", "KEY", "apikey", "api_key", "APIKey", "API_KEY",
+    ):
+        v = body.get(name)
+        if v is not None and _normalize_form_value(v) != "":
+            return unquote_plus(_normalize_form_value(v).strip())
+    return ""
+
+def _extract_action(body: dict) -> str:
+    for name in ("action", "Action", "type", "Type"):
+        v = body.get(name)
+        if v is not None and _normalize_form_value(v) != "":
+            return _normalize_form_value(v).strip()
+    return ""
+
+def _merge_query_params(request: Request, body: dict) -> dict:
+    """Some clients send key/action in query string with POST (or wrong Content-Type)."""
+    out = dict(body)
+    for k, v in request.query_params.items():
+        if k not in out and v is not None:
+            out[k] = v
+    if not _extract_key(out) and "key" in request.query_params:
+        out["key"] = request.query_params["key"]
+    if not _extract_action(out) and "action" in request.query_params:
+        out["action"] = request.query_params["action"]
+    return out
+
 async def _read_body(request: Request) -> dict:
+    """
+    Read body once. SMM panels use JSON, application/x-www-form-urlencoded, or multipart;
+    using request.form() first then request.json() can fail to read the body correctly.
+    """
+    ct = (request.headers.get("content-type") or "").lower()
+    if "multipart/form-data" in ct:
+        try:
+            form = await request.form()
+            return {k: _normalize_form_value(v) for k, v in form.items()}
+        except Exception:
+            return {}
     try:
-        form = await request.form()
-        if form:
-            return {k: v for k, v in form.items()}
+        raw = await request.body()
     except Exception:
-        pass
-    try:
-        data = await request.json()
-        if isinstance(data, dict):
-            return data
-    except Exception:
-        pass
+        return {}
+    if not raw:
+        return {}
+    text = raw.decode("utf-8", "replace")
+    st = text.lstrip()
+    if st.startswith("{") or st.startswith("["):
+        try:
+            data = json.loads(text)
+            if isinstance(data, dict):
+                return data
+        except json.JSONDecodeError:
+            pass
+    if "application/json" in ct:
+        try:
+            data = json.loads(text)
+            if isinstance(data, dict):
+                return data
+        except json.JSONDecodeError:
+            pass
+    if "=" in text and not text.lstrip().startswith(("{", "[")):
+        try:
+            parsed = parse_qs(text, keep_blank_values=True, strict_parsing=False)
+            if parsed:
+                return {k: (v[0] if v else "") for k, v in parsed.items()}
+        except Exception:
+            pass
     return {}
 
-@router.post("/v2")
+@router.api_route("/v2", methods=["GET", "POST", "PUT"])
 async def api_v2_handler(request: Request):
     """
     Reseller API v2 endpoint
@@ -66,9 +133,9 @@ async def api_v2_handler(request: Request):
     """
     t0 = perf_counter()
     ip = get_request_ip(request)
-    body = await _read_body(request)
-    action = str(body.get("action") or "").strip()
-    key = str(body.get("key") or "").strip()
+    body = _merge_query_params(request, await _read_body(request))
+    action = _extract_action(body)
+    key = _extract_key(body)
 
     user = None
     user_id = None
@@ -84,8 +151,9 @@ async def api_v2_handler(request: Request):
             response = _err("Invalid API key")
             return response
 
-        user = await db.users.find_one({"apiKey": key, "status": "active"})
-        if not user:
+        # Match by api key; only block banned accounts (older records may lack status)
+        user = await db.users.find_one({"apiKey": key})
+        if not user or user.get("status") == "banned":
             response = _err("Invalid API key")
             return response
 
@@ -125,10 +193,12 @@ async def api_v2_handler(request: Request):
                     "service": str(svc["_id"]),
                     "name": svc.get("name", ""),
                     "category": cat_name.get(svc.get("categoryId"), "Unknown"),
-                    "rate": rate,
-                    "min": min_qty,
-                    "max": max_qty,
+                    "rate": f"{float(rate):.2f}",
+                    "min": str(min_qty),
+                    "max": str(max_qty),
                     "type": svc.get("type", "Default"),
+                    "refill": bool(svc.get("refillEnabled", False)),
+                    "cancel": True,
                 })
             response = _ok(result)
             return response
