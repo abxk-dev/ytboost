@@ -55,6 +55,12 @@ async def resolve_service_for_add(db, user_id, service_param: Any) -> Optional[T
         return None
     svc = await db.services.find_one({"sid": n, "status": True})
     if not svc:
+        # services list can show jap_service_number() for legacy rows with no `sid` field; match that
+        for doc in await db.services.find({"status": True}).to_list(5000):
+            if jap_service_number(doc) == n:
+                svc = doc
+                break
+    if not svc:
         return None
     sp = await db.user_special_services.find_one(
         {"userId": user_id, "serviceId": svc["_id"], "status": True}

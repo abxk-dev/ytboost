@@ -239,12 +239,6 @@ export default function ApiAccess() {
                   </div>
                   <div className="mt-2 font-mono text-sm text-[#111827] break-all">{baseUrl}</div>
                   <div className="mt-1 font-mono text-xs text-[#6b7280] break-all">Alternate (same API): {baseUrlAlt}</div>
-                  <p className="mt-2 text-xs text-[#6b7280]">
-                    On external SMM panels, set the API URL to <span className="font-mono">{baseUrl}</span> (Just Another Panel style) or <span className="font-mono">{baseUrlAlt}</span> — both are identical.
-                    Use the same <span className="font-mono">POST</span> + <span className="font-mono">key</span> / <span className="font-mono">action</span> pattern as panels like{' '}
-                    <a href="https://justanotherpanel.com/api" className="text-[#7c3aed] underline" target="_blank" rel="noreferrer">Just Another Panel</a>
-                    .
-                  </p>
                 </div>
 
                 <div className="grid gap-4 md:grid-cols-2">
@@ -271,18 +265,18 @@ export default function ApiAccess() {
                   <div className="space-y-3 text-sm text-[#374151]">
                     <div className="rounded-[10px] border border-[#e5e7eb] bg-[#fafafa] p-3">
                       <div className="font-semibold">action=services</div>
-                      <div className="text-xs text-[#6b7280] mt-1">Response: service list with rate/min/max</div>
-                      <pre className="mt-2 bg-[#111827] text-green-400 rounded-[10px] p-3 text-xs overflow-x-auto">{`[{"service":"ID","name":"Service name","category":"Category","rate":0.25,"min":100,"max":10000,"type":"Default"}]`}</pre>
+                      <div className="text-xs text-[#6b7280] mt-1">Response: <code>service</code> is a small integer (JAP-style). Re-fetch after admin changes; use this number in <code>add</code>.</div>
+                      <pre className="mt-2 bg-[#111827] text-green-400 rounded-[10px] p-3 text-xs overflow-x-auto">{`[{"service":101,"name":"Service name","category":"Category","rate":"0.25","min":"100","max":"10000","type":"Default",...}]`}</pre>
                     </div>
                     <div className="rounded-[10px] border border-[#e5e7eb] bg-[#fafafa] p-3">
                       <div className="font-semibold">action=add</div>
-                      <div className="text-xs text-[#6b7280] mt-1">Request: key, action, service, link, quantity</div>
-                      <pre className="mt-2 bg-[#111827] text-green-400 rounded-[10px] p-3 text-xs overflow-x-auto">{`{"order":"65f0..."}\n\nError: {"error":"Insufficient balance"}`}</pre>
+                      <div className="text-xs text-[#6b7280] mt-1">Request: key, action, <code>service</code> (number from services), link, quantity</div>
+                      <pre className="mt-2 bg-[#111827] text-green-400 rounded-[10px] p-3 text-xs overflow-x-auto">{`{"order": 23501}\n\n(24-char hex Mongo id in service/link still works for some requests; prefer numeric service + order.)\n\nError: {"error":"Insufficient balance"}`}</pre>
                     </div>
                     <div className="rounded-[10px] border border-[#e5e7eb] bg-[#fafafa] p-3">
                       <div className="font-semibold">action=status</div>
-                      <div className="text-xs text-[#6b7280] mt-1">Request: key, action, order</div>
-                      <pre className="mt-2 bg-[#111827] text-green-400 rounded-[10px] p-3 text-xs overflow-x-auto">{`{"charge":1.5,"start_count":0,"status":"Pending","remains":1000}\n\nError: {"error":"Incorrect order ID"}`}</pre>
+                      <div className="text-xs text-[#6b7280] mt-1">Request: key, action, <code>order</code> (integer from add) or <code>orders=1,2,3</code> for many</div>
+                      <pre className="mt-2 bg-[#111827] text-green-400 rounded-[10px] p-3 text-xs overflow-x-auto">{`{"charge":"0.5","start_count":"0","status":"Pending","remains":"1000","currency":"USD"}\n\nError: {"error":"Incorrect order ID"}`}</pre>
                     </div>
                     <div className="rounded-[10px] border border-[#e5e7eb] bg-[#fafafa] p-3">
                       <div className="font-semibold">action=balance</div>
@@ -290,7 +284,8 @@ export default function ApiAccess() {
                     </div>
                     <div className="rounded-[10px] border border-[#e5e7eb] bg-[#fafafa] p-3">
                       <div className="font-semibold">action=cancel</div>
-                      <pre className="mt-2 bg-[#111827] text-green-400 rounded-[10px] p-3 text-xs overflow-x-auto">{`{"cancel":"65f0..."}\n\nError: {"error":"Incorrect order ID"}`}</pre>
+                      <div className="text-xs text-[#6b7280] mt-1">Request: <code>order</code> (id from <code>add</code>) or <code>orders=1,2,3</code></div>
+                      <pre className="mt-2 bg-[#111827] text-green-400 rounded-[10px] p-3 text-xs overflow-x-auto">{`{"cancel":1}\n\nOR multi: [{"order":1,"cancel":1},...]\n\nError: {"error":"Incorrect order ID"}`}</pre>
                     </div>
                   </div>
                 </div>
