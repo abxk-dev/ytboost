@@ -330,7 +330,9 @@ export default function AdminServices() {
                         <Checkbox checked={selectedIds.has(svc.id)} onCheckedChange={(v) => toggleSelectOne(svc.id, v)} aria-label={`Select service ${svc.name}`} />
                       </td>
                       <td className={`py-4 px-4 text-sm font-mono font-bold ${c.textSecondary}`}>
-                        <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs">{svc.sid || '—'}</span>
+                        <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs" title="Same as reseller API service id">
+                          {svc.serviceNumber != null && svc.serviceNumber !== '' ? svc.serviceNumber : (svc.sid != null && svc.sid !== '' ? svc.sid : '—')}
+                        </span>
                       </td>
                       <td className={`py-4 px-4 text-sm font-medium ${c.text} max-w-[200px] truncate`}>{svc.name}</td>
                       <td className={`py-4 px-4 text-sm ${c.textSecondary}`}>{svc.categoryName}</td>

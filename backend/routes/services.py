@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from bson import ObjectId
 from typing import Optional
 
+from backend.smm.jap_v2 import jap_service_number
+
 router = APIRouter(tags=["Services"])
 
 # Request models
@@ -68,8 +70,20 @@ def set_db(database):
     db = database
 
 def _service_fields(svc):
-    """Common service field extractor"""
+    """
+    Includes `serviceNumber` — same integer as /api/v2 action=services field `service`
+    (JAP / reseller panels). Use this everywhere the panel-facing id is shown.
+    """
+    if not isinstance(svc, dict) or svc.get("_id") is None:
+        sn = 0
+    else:
+        try:
+            sn = jap_service_number(svc)
+        except (TypeError, ValueError, KeyError):
+            sn = 0
     return {
+        'serviceNumber': sn,
+        'sid': svc.get('sid'),
         'startTime': svc.get('startTime', ''),
         'speed': svc.get('speed', ''),
         'refillTime': svc.get('refillTime', ''),
@@ -104,7 +118,6 @@ async def get_services():
             'rate': svc['rate'],
             'minQty': svc['minQty'],
             'maxQty': svc['maxQty'],
-            'sid': svc.get('sid'),
             'type': svc.get('type', 'Default'),
             **_service_fields(svc)
         })
@@ -167,7 +180,7 @@ async def get_user_services(request: Request):
         svc = await db.services.find_one({'_id': ss['serviceId'], 'status': True})
         if svc:
             cat = await db.categories.find_one({'_id': svc['categoryId']})
-            result.append({
+            row = {
                 'id': str(svc['_id']),
                 'name': svc['name'],
                 'categoryId': str(svc['categoryId']),
@@ -179,15 +192,19 @@ async def get_user_services(request: Request):
                 'maxQty': ss.get('maxQty', svc['maxQty']),
                 'type': svc.get('type', 'Default'),
                 'isSpecial': True,
-                **_service_fields(svc)
-            })
+                **_service_fields(svc),
+            }
+            # Always re-set (same as admin + /api/v2) so list never misses ids
+            row['sid'] = svc.get('sid')
+            row['serviceNumber'] = jap_service_number(svc)
+            result.append(row)
     
     # Add regular services (excluding special ones)
     for svc in services:
         svc_id = str(svc['_id'])
         if svc_id not in special_map:
             cat = await db.categories.find_one({'_id': svc['categoryId']})
-            result.append({
+            row = {
                 'id': svc_id,
                 'name': svc['name'],
                 'categoryId': str(svc['categoryId']),
@@ -199,8 +216,11 @@ async def get_user_services(request: Request):
                 'maxQty': svc['maxQty'],
                 'type': svc.get('type', 'Default'),
                 'isSpecial': False,
-                **_service_fields(svc)
-            })
+                **_service_fields(svc),
+            }
+            row['sid'] = svc.get('sid')
+            row['serviceNumber'] = jap_service_number(svc)
+            result.append(row)
     
     return result
 
@@ -216,7 +236,7 @@ async def admin_get_services(request: Request):
     result = []
     for svc in services:
         cat = await db.categories.find_one({'_id': svc['categoryId']})
-        result.append({
+        row = {
             'id': str(svc['_id']),
             'name': svc['name'],
             'categoryId': str(svc['categoryId']),
@@ -225,12 +245,14 @@ async def admin_get_services(request: Request):
             'rate': svc['rate'],
             'minQty': svc['minQty'],
             'maxQty': svc['maxQty'],
-            'sid': svc.get('sid'),
             'type': svc.get('type', 'Default'),
             'status': svc.get('status', True),
             'createdAt': svc.get('createdAt'),
-            **_service_fields(svc)
-        })
+            **_service_fields(svc),
+        }
+        row['sid'] = svc.get('sid')
+        row['serviceNumber'] = jap_service_number(svc)
+        result.append(row)
     
     return result
 

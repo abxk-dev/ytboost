@@ -22,6 +22,38 @@ function fmtRate(rate) {
   return n.toFixed(2);
 }
 
+/**
+ * Panel-facing id: same as admin "ID" and reseller API `action=services` → `service` (from backend `serviceNumber` / `sid`).
+ */
+function getServiceListId(svc) {
+  if (!svc) return '';
+  const n = Number(svc.serviceNumber ?? svc.sid);
+  if (Number.isFinite(n) && n > 0) return String(n);
+  if (svc.sid != null && svc.sid !== '') return String(svc.sid);
+  if (svc.serviceNumber != null && svc.serviceNumber !== '') return String(svc.serviceNumber);
+  const id = svc.id;
+  if (!id || String(id).length < 6) return '';
+  const hex = String(id).replace(/[^a-f0-9]/gi, '').slice(-6);
+  if (!hex) return '';
+  const h = (parseInt(hex, 16) % 1_000_000) + 1;
+  return String(h);
+}
+
+/** Fill serviceNumber/sid from public /services if /services/user is missing them (caches, proxies, old API). */
+function mergeServicePanelIds(userList, publicList) {
+  if (!userList || !userList.length) return userList || [];
+  const pubById = Object.fromEntries((publicList || []).map((x) => [x.id, x]));
+  return userList.map((s) => {
+    const p = pubById[s.id];
+    if (!p) return s;
+    return {
+      ...s,
+      serviceNumber: s.serviceNumber ?? p.serviceNumber,
+      sid: s.sid !== undefined && s.sid !== null && s.sid !== '' ? s.sid : p.sid,
+    };
+  });
+}
+
 function ServiceInfoCard({ service }) {
   const [liveStart, setLiveStart] = useState(service.startTime || '');
   const [liveSpeed, setLiveSpeed] = useState(service.speed || '');
@@ -114,10 +146,15 @@ export default function AddOrder() {
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
+      const bust = { params: { _: Date.now() } };
       try {
-        const [catRes, svcRes] = await Promise.all([api.get('/categories'), api.get('/services/user')]);
+        const [catRes, pubRes, userRes] = await Promise.all([
+          api.get('/categories', bust),
+          api.get('/services', bust),
+          api.get('/services/user', bust),
+        ]);
         setCategories(catRes.data);
-        setServices(svcRes.data);
+        setServices(mergeServicePanelIds(userRes.data, pubRes.data));
       } catch (err) {
         toast.error('Failed to load services');
       } finally {
@@ -251,9 +288,16 @@ export default function AddOrder() {
               <Select value={selectedService?.id || ''} onValueChange={handleServiceChange} disabled={!selectedCategory}>
                 <SelectTrigger className="h-11 rounded-[8px] border-[#e5e7eb]" data-testid="service-select"><SelectValue placeholder="Select a service" /></SelectTrigger>
                 <SelectContent>
-                  {filteredServices.map(svc => (
-                    <SelectItem key={svc.id} value={svc.id}>
-                      <div className="flex items-center justify-between gap-4">
+                  {filteredServices.map(svc => {
+                    const listId = getServiceListId(svc);
+                    const idPrefix = listId ? `${listId} | ` : '';
+                    return (
+                    <SelectItem
+                      key={svc.id}
+                      value={svc.id}
+                      textValue={`${idPrefix}${svc.name} $${fmtRate(svc.rate)}/1000`}
+                    >
+                      <div className="flex items-center justify-between gap-4 w-full min-w-0">
                         <span className="flex items-center gap-2 min-w-0">
                           {svc.isSpecial && (
                             <span title={`Your special rate: $${fmtRate(svc.rate)}/1000`} className="inline-flex items-center gap-1">
@@ -261,9 +305,16 @@ export default function AddOrder() {
                               <span className="text-xs font-semibold text-amber-600">VIP</span>
                             </span>
                           )}
-                          {TYPE_ICONS[svc.type] && <span>{TYPE_ICONS[svc.type]}</span>}
-                          {svc.sid && <span className="text-xs font-mono bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded shrink-0">#{svc.sid}</span>}
-                          <span className="truncate">{svc.name}</span>
+                          {TYPE_ICONS[svc.type] && <span className="shrink-0">{TYPE_ICONS[svc.type]}</span>}
+                          <span className="truncate text-left">
+                            {listId ? (
+                              <>
+                                <span className="font-mono text-xs font-semibold text-[#7c3aed] tabular-nums shrink-0">{listId}</span>
+                                <span className="text-[#9ca3af] mx-1" aria-hidden>|</span>
+                              </>
+                            ) : null}
+                            <span className="font-medium text-[#111827]">{svc.name}</span>
+                          </span>
                         </span>
                         <span className="flex items-center gap-2 shrink-0">
                           {svc.isSpecial ? (
@@ -277,7 +328,8 @@ export default function AddOrder() {
                         </span>
                       </div>
                     </SelectItem>
-                  ))}
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
