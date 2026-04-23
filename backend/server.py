@@ -108,6 +108,8 @@ app.include_router(users.router, prefix="/api")
 app.include_router(transactions.router, prefix="/api")
 app.include_router(settings.router, prefix="/api")
 app.include_router(apiv2.router, prefix="/api")
+# JAP / panels: some apps use only https://domain.com/api/v2 — also accept https://domain.com/v2
+app.include_router(apiv2.router, prefix="")
 app.include_router(api_providers.router, prefix="/api")
 app.include_router(support.router, prefix="/api")
 app.include_router(system.router, prefix="/api")

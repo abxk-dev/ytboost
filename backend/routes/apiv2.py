@@ -4,6 +4,7 @@ Compatible with common SMM panel POST APIs (e.g. Just Another Panel /api/v2 styl
 """
 import logging
 from fastapi import APIRouter, Request
+from fastapi.responses import JSONResponse, Response
 from datetime import datetime, timezone
 from bson import ObjectId
 import re
@@ -41,6 +42,17 @@ def _ok(result):
 def _err(message: str):
     return {"error": message}
 
+def _v2_json(data, status_code: int = 200) -> JSONResponse:
+    """
+    SMM panels expect 200 with application/json (not HTML). Always UTF-8.
+    List body is valid for action=services (JAP returns a JSON array).
+    """
+    return JSONResponse(
+        content=data,
+        status_code=status_code,
+        media_type="application/json; charset=utf-8",
+    )
+
 def _normalize_form_value(v) -> str:
     if v is None:
         return ""
@@ -59,12 +71,27 @@ def _clean_api_key(s: str) -> str:
 def _extract_key(body: dict) -> str:
     """SMM panels vary: key, apikey, api_key, or query-only."""
     for name in (
-        "key", "Key", "KEY", "apikey", "api_key", "APIKey", "API_KEY",
+        "key", "Key", "KEY", "apikey", "api_key", "APIKey", "API_KEY", "auth", "token",
     ):
         v = body.get(name)
         if v is not None and _normalize_form_value(v) != "":
             return _clean_api_key(_normalize_form_value(v))
     return ""
+
+
+def _merge_key_from_headers(request: Request, body: dict) -> dict:
+    if _extract_key(body):
+        return body
+    out = dict(body)
+    for hname in ("X-API-Key", "X-Api-Key", "API-Key"):
+        v = request.headers.get(hname)
+        if v and str(v).strip():
+            out["key"] = str(v).strip()
+            return out
+    auth = (request.headers.get("Authorization") or "").strip()
+    if auth.lower().startswith("bearer "):
+        out["key"] = _clean_api_key(auth[7:])
+    return out
 
 def _extract_action(body: dict) -> str:
     for name in ("action", "Action", "type", "Type"):
@@ -77,7 +104,9 @@ def _merge_query_params(request: Request, body: dict) -> dict:
     """Some clients send key/action in query string with POST (or wrong Content-Type)."""
     out = dict(body)
     for k, v in request.query_params.items():
-        if k not in out and v is not None:
+        if v is None:
+            continue
+        if k not in out or _normalize_form_value(out.get(k)) == "":
             out[k] = v
     if not _extract_key(out) and "key" in request.query_params:
         out["key"] = request.query_params["key"]
@@ -155,10 +184,17 @@ _log = logging.getLogger(__name__)
 @router.get("/v2/health")
 async def api_v2_health():
     """Public: load balancers / external panels can probe without a key."""
-    return {"ok": True, "v": 2}
+    return _v2_json({"ok": True, "v": 2, "endpoints": ["/v2", "/api/v2"]})
 
-@router.api_route("/v2", methods=["GET", "POST", "PUT"])
-@router.api_route("/v2/", methods=["GET", "POST", "PUT"])
+
+@router.api_route(
+    "/v2",
+    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
+)
+@router.api_route(
+    "/v2/",
+    methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD", "PATCH"],
+)
 async def api_v2_handler(request: Request):
     """
     Reseller API v2 endpoint
@@ -172,6 +208,11 @@ async def api_v2_handler(request: Request):
     """
     t0 = perf_counter()
     ip = get_request_ip(request)
+    if request.method == "OPTIONS":
+        return Response(status_code=200)
+    if request.method == "HEAD":
+        return Response(status_code=200)
+
     user = None
     user_id = None
     http_status = 200
@@ -181,29 +222,34 @@ async def api_v2_handler(request: Request):
     response = _err("Incorrect request")
 
     try:
-        body = _merge_query_params(request, await _read_body(request))
-        action = _extract_action(body)
+        body = _merge_key_from_headers(
+            request,
+            _merge_query_params(request, await _read_body(request)),
+        )
+        action = (_extract_action(body) or "").lower().strip()
         key = _extract_key(body)
 
         if not action:
             response = _err("Incorrect request")
-            return response
+            return _v2_json(response)
 
         if not key:
             response = _err("Invalid API key")
-            return response
+            return _v2_json(response)
 
         user = await _find_user_by_api_key(key)
         if not user:
             response = _err("Invalid API key")
-            return response
+            return _v2_json(response)
 
         user_id = user["_id"]
         await db.users.update_one({"_id": user_id}, {"$set": {"apiKeyLastUsedAt": datetime.now(timezone.utc)}})
 
         if action == "balance":
-            response = _ok({"balance": round(float(user.get("balance", 0) or 0), 4), "currency": "USD"})
-            return response
+            bal = float(user.get("balance", 0) or 0)
+            # JAP-style: balance is a string in their docs
+            response = _ok({"balance": f"{bal:.4f}", "currency": "USD"})
+            return _v2_json(response)
 
         if action == "services":
             services = await db.services.find({"status": True}).to_list(5000)
@@ -242,7 +288,7 @@ async def api_v2_handler(request: Request):
                     "cancel": True,
                 })
             response = _ok(result)
-            return response
+            return _v2_json(response)
 
         if action == "add":
             service_id = str(body.get("service") or "").strip()
@@ -250,24 +296,24 @@ async def api_v2_handler(request: Request):
             quantity_raw = body.get("quantity")
             if not service_id or not link or quantity_raw is None:
                 response = _err("Incorrect request")
-                return response
+                return _v2_json(response)
             try:
                 quantity = int(quantity_raw)
             except Exception:
                 response = _err("Incorrect request")
-                return response
+                return _v2_json(response)
             if not validate_youtube_url(link):
                 response = _err("Incorrect request")
-                return response
+                return _v2_json(response)
             try:
                 svc_obj_id = ObjectId(service_id)
             except Exception:
                 response = _err("Incorrect request")
-                return response
+                return _v2_json(response)
             service = await db.services.find_one({"_id": svc_obj_id, "status": True})
             if not service:
                 response = _err("Incorrect request")
-                return response
+                return _v2_json(response)
 
             special = await db.user_special_services.find_one({"userId": user_id, "serviceId": svc_obj_id, "status": True})
             if special:
@@ -281,7 +327,7 @@ async def api_v2_handler(request: Request):
 
             if quantity < min_qty or quantity > max_qty:
                 response = _err("Incorrect request")
-                return response
+                return _v2_json(response)
 
             svc_type = service.get("type", "Default")
             if svc_type == "Package":
@@ -298,7 +344,7 @@ async def api_v2_handler(request: Request):
             )
             if not updated_user:
                 response = _err("Insufficient balance")
-                return response
+                return _v2_json(response)
 
             fulfillment = service.get("fulfillmentType", "manual")
             provider_name = ""
@@ -357,50 +403,51 @@ async def api_v2_handler(request: Request):
             })
 
             response = _ok({"order": str(insert.inserted_id)})
-            return response
+            return _v2_json(response)
 
         if action == "status":
             order_id = str(body.get("order") or "").strip()
             if not order_id:
                 response = _err("Incorrect order ID")
-                return response
+                return _v2_json(response)
             try:
                 order_obj_id = ObjectId(order_id)
             except Exception:
                 response = _err("Incorrect order ID")
-                return response
+                return _v2_json(response)
             order = await db.orders.find_one({"_id": order_obj_id, "userId": user_id})
             if not order:
                 response = _err("Incorrect order ID")
-                return response
+                return _v2_json(response)
             response = _ok({
-                "charge": float(order.get("charge", 0) or 0),
-                "start_count": int(order.get("startCount", 0) or 0),
-                "status": order.get("status", ""),
-                "remains": int(order.get("remains", 0) or 0),
+                "charge": f"{float(order.get('charge', 0) or 0):.5f}",
+                "start_count": str(int(order.get("startCount", 0) or 0)),
+                "status": str(order.get("status", "")),
+                "remains": str(int(order.get("remains", 0) or 0)),
+                "currency": "USD",
             })
-            return response
+            return _v2_json(response)
 
         if action == "cancel":
             order_id = str(body.get("order") or "").strip()
             if not order_id:
                 response = _err("Incorrect order ID")
-                return response
+                return _v2_json(response)
             try:
                 order_obj_id = ObjectId(order_id)
             except Exception:
                 response = _err("Incorrect order ID")
-                return response
+                return _v2_json(response)
             order = await db.orders.find_one({"_id": order_obj_id, "userId": user_id})
             if not order:
                 response = _err("Incorrect order ID")
-                return response
+                return _v2_json(response)
             await db.orders.update_one({"_id": order_obj_id}, {"$set": {"status": "Cancellation Requested", "cancellationRequestedAt": datetime.now(timezone.utc)}})
             response = _ok({"cancel": str(order_obj_id)})
-            return response
+            return _v2_json(response)
 
         response = _err("Incorrect request")
-        return response
+        return _v2_json(response)
     except Exception as exc:
         _log.exception("apiv2 handler: %s", exc)
         response = _err("Service temporarily unavailable")
@@ -419,4 +466,4 @@ async def api_v2_handler(request: Request):
             await db.api_call_logs.insert_one(log_doc)
         except Exception:
             pass
-    return response
+    return _v2_json(response)

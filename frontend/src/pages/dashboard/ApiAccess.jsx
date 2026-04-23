@@ -106,9 +106,11 @@ export default function ApiAccess() {
     }
   };
 
-  // Same-origin in dev (proxy) or production; external SMM panels must use your public site URL + /api/v2
+  // Same-origin in dev (proxy) or production. Panels may use /api/v2 (JAP) or /v2 — both work.
   const baseUrl =
     typeof window !== 'undefined' ? `${window.location.origin}/api/v2` : 'https://ytboost.io/api/v2';
+  const baseUrlAlt =
+    typeof window !== 'undefined' ? `${window.location.origin}/v2` : 'https://ytboost.io/v2';
 
   const callsChart = useMemo(() => {
     const arr = Array.isArray(stats?.callsPerDay) ? stats.callsPerDay : [];
@@ -236,8 +238,9 @@ export default function ApiAccess() {
                     Endpoint
                   </div>
                   <div className="mt-2 font-mono text-sm text-[#111827] break-all">{baseUrl}</div>
+                  <div className="mt-1 font-mono text-xs text-[#6b7280] break-all">Alternate (same API): {baseUrlAlt}</div>
                   <p className="mt-2 text-xs text-[#6b7280]">
-                    On external SMM panels, set the API URL to this full address (it must end with <span className="font-mono">/api/v2</span>).
+                    On external SMM panels, set the API URL to <span className="font-mono">{baseUrl}</span> (Just Another Panel style) or <span className="font-mono">{baseUrlAlt}</span> — both are identical.
                     Use the same <span className="font-mono">POST</span> + <span className="font-mono">key</span> / <span className="font-mono">action</span> pattern as panels like{' '}
                     <a href="https://justanotherpanel.com/api" className="text-[#7c3aed] underline" target="_blank" rel="noreferrer">Just Another Panel</a>
                     .
