@@ -1,0 +1,1 @@
+# SMM / JAP compatibility package

@@ -13,6 +13,15 @@ from time import perf_counter
 from urllib.parse import parse_qs, unquote_plus
 from pymongo import ReturnDocument
 from backend.middleware.admin import get_request_ip
+from backend.smm.jap_v2 import (
+    get_next_jap_order_number,
+    jap_service_number,
+    jap_status_dict,
+    parse_cancel_orders,
+    parse_status_orders,
+    resolve_service_for_add,
+    resolve_user_order_by_jap_param,
+)
 
 router = APIRouter(tags=["API v2"])
 
@@ -271,13 +280,14 @@ async def api_v2_handler(request: Request):
                     continue
                 ordered.append((svc, None))
 
+            # JAP: "service" is a small integer; we use admin 3-digit sid (https://justanotherpanel.com/api)
             result = []
             for svc, ss in ordered:
                 rate = float(ss["customRate"]) if ss else float(svc.get("rate", 0))
                 min_qty = int(ss.get("minQty", svc.get("minQty", 0))) if ss else int(svc.get("minQty", 0))
                 max_qty = int(ss.get("maxQty", svc.get("maxQty", 0))) if ss else int(svc.get("maxQty", 0))
                 result.append({
-                    "service": str(svc["_id"]),
+                    "service": jap_service_number(svc),
                     "name": svc.get("name", ""),
                     "category": cat_name.get(svc.get("categoryId"), "Unknown"),
                     "rate": f"{float(rate):.2f}",
@@ -291,12 +301,14 @@ async def api_v2_handler(request: Request):
             return _v2_json(response)
 
         if action == "add":
-            service_id = str(body.get("service") or "").strip()
             link = str(body.get("link") or "").strip()
             quantity_raw = body.get("quantity")
-            if not service_id or not link or quantity_raw is None:
+            resolved = await resolve_service_for_add(db, user_id, body.get("service"))
+            if not resolved or not link or quantity_raw is None:
                 response = _err("Incorrect request")
                 return _v2_json(response)
+            service, special = resolved
+            svc_obj_id = service["_id"]
             try:
                 quantity = int(quantity_raw)
             except Exception:
@@ -305,17 +317,7 @@ async def api_v2_handler(request: Request):
             if not validate_youtube_url(link):
                 response = _err("Incorrect request")
                 return _v2_json(response)
-            try:
-                svc_obj_id = ObjectId(service_id)
-            except Exception:
-                response = _err("Incorrect request")
-                return _v2_json(response)
-            service = await db.services.find_one({"_id": svc_obj_id, "status": True})
-            if not service:
-                response = _err("Incorrect request")
-                return _v2_json(response)
 
-            special = await db.user_special_services.find_one({"userId": user_id, "serviceId": svc_obj_id, "status": True})
             if special:
                 rate = float(special.get("customRate", service.get("rate", 0)))
                 min_qty = int(special.get("minQty", service.get("minQty", 0)))
@@ -372,8 +374,10 @@ async def api_v2_handler(request: Request):
                         pass
 
             now = datetime.now(timezone.utc)
+            jap_id = await get_next_jap_order_number(db)
             order_doc = {
                 "userId": user_id,
+                "japOrderId": jap_id,
                 "serviceId": svc_obj_id,
                 "serviceType": service.get("type", "Default"),
                 "link": link,
@@ -402,48 +406,101 @@ async def api_v2_handler(request: Request):
                 "createdAt": now,
             })
 
-            response = _ok({"order": str(insert.inserted_id)})
+            # JAP: { "order": 23501 } (integer)
+            response = _ok({"order": jap_id})
             return _v2_json(response)
 
         if action == "status":
-            order_id = str(body.get("order") or "").strip()
-            if not order_id:
+            status_keys = parse_status_orders(body)
+            if status_keys:
+                if len(status_keys) > 100:
+                    response = _err("Incorrect request")
+                    return _v2_json(response)
+                multi: dict = {}
+                for k in status_keys:
+                    o = await resolve_user_order_by_jap_param(db, user_id, k)
+                    if not o:
+                        multi[k] = {"error": "Incorrect order ID"}
+                    else:
+                        multi[k] = jap_status_dict(o)
+                response = _ok(multi)
+                return _v2_json(response)
+            order_param = body.get("order")
+            if order_param is None or str(order_param).strip() == "":
                 response = _err("Incorrect order ID")
                 return _v2_json(response)
-            try:
-                order_obj_id = ObjectId(order_id)
-            except Exception:
-                response = _err("Incorrect order ID")
-                return _v2_json(response)
-            order = await db.orders.find_one({"_id": order_obj_id, "userId": user_id})
+            order = await resolve_user_order_by_jap_param(db, user_id, order_param)
             if not order:
                 response = _err("Incorrect order ID")
                 return _v2_json(response)
-            response = _ok({
-                "charge": f"{float(order.get('charge', 0) or 0):.5f}",
-                "start_count": str(int(order.get("startCount", 0) or 0)),
-                "status": str(order.get("status", "")),
-                "remains": str(int(order.get("remains", 0) or 0)),
-                "currency": "USD",
-            })
+            response = _ok(jap_status_dict(order))
             return _v2_json(response)
 
         if action == "cancel":
-            order_id = str(body.get("order") or "").strip()
-            if not order_id:
+            cancel_keys = parse_cancel_orders(body)
+            if cancel_keys:
+                if len(cancel_keys) > 100:
+                    response = _err("Incorrect request")
+                    return _v2_json(response)
+                out_list = []
+                for k in cancel_keys:
+                    o = await resolve_user_order_by_jap_param(db, user_id, k)
+                    try:
+                        ord_key = int(k) if str(k).strip().lstrip("-").isdigit() else k
+                    except Exception:
+                        ord_key = k
+                    if not o:
+                        out_list.append(
+                            {
+                                "order": ord_key,
+                                "cancel": {"error": "Incorrect order ID"},
+                            }
+                        )
+                    else:
+                        await db.orders.update_one(
+                            {"_id": o["_id"]},
+                            {
+                                "$set": {
+                                    "status": "Cancellation Requested",
+                                    "cancellationRequestedAt": datetime.now(timezone.utc),
+                                }
+                            },
+                        )
+                        o_j = o.get("japOrderId")
+                        if o_j is not None:
+                            out_list.append({"order": int(o_j), "cancel": 1})
+                        else:
+                            out_list.append({"order": ord_key, "cancel": 1})
+                response = _ok(out_list)
+                return _v2_json(response)
+            order_param = body.get("order")
+            if order_param is None or str(order_param).strip() == "":
                 response = _err("Incorrect order ID")
                 return _v2_json(response)
-            try:
-                order_obj_id = ObjectId(order_id)
-            except Exception:
-                response = _err("Incorrect order ID")
-                return _v2_json(response)
-            order = await db.orders.find_one({"_id": order_obj_id, "userId": user_id})
+            order = await resolve_user_order_by_jap_param(db, user_id, order_param)
             if not order:
                 response = _err("Incorrect order ID")
                 return _v2_json(response)
-            await db.orders.update_one({"_id": order_obj_id}, {"$set": {"status": "Cancellation Requested", "cancellationRequestedAt": datetime.now(timezone.utc)}})
-            response = _ok({"cancel": str(order_obj_id)})
+            await db.orders.update_one(
+                {"_id": order["_id"]},
+                {
+                    "$set": {
+                        "status": "Cancellation Requested",
+                        "cancellationRequestedAt": datetime.now(timezone.utc),
+                    }
+                },
+            )
+            # JAP: { "cancel": 1 } on success
+            response = _ok({"cancel": 1})
+            return _v2_json(response)
+
+        if action == "refill":
+            # JAP-compatible stub — full refill flow not implemented
+            response = _err("Refill not available")
+            return _v2_json(response)
+
+        if action == "refill_status":
+            response = _err("Refill not found")
             return _v2_json(response)
 
         response = _err("Incorrect request")
