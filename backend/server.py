@@ -44,10 +44,13 @@ if mongo_url.startswith("mongodb+srv://") or "mongodb.net" in mongo_url:
 client = AsyncIOMotorClient(mongo_url, **mongo_client_kwargs)
 db = client[db_name]
 
-# CORS
+# CORS: allow any http(s) origin by regex so SMM panel admin UIs (browser) can call /api/v2; override with CORS_ORIGIN_REGEX=none
 import os as _os
 _cors_env = _os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://localhost:5173")
-origins = [o.strip() for o in _cors_env.split(",") if o.strip()]
+origins = [o.strip() for o in _cors_env.split(",") if o.strip() and o.strip() != "*"]
+_cors_regex = _os.environ.get("CORS_ORIGIN_REGEX", "https?://.+").strip()
+if _cors_regex.lower() in ("", "none", "false"):
+    _cors_regex = None
 
 # Socket.io
 sio = socketio.AsyncServer(
@@ -62,6 +65,7 @@ socket_app = socketio.ASGIApp(sio, app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
+    allow_origin_regex=_cors_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

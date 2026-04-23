@@ -47,6 +47,14 @@ def _normalize_form_value(v) -> str:
         return ""
     return str(v).strip()
 
+def _strip_invisible(s: str) -> str:
+    s = s.replace("\ufeff", "")
+    s = re.sub(r"[\u200b\u200c\u200d\ufeff]", "", s)
+    return s
+
+def _clean_api_key(s: str) -> str:
+    return unquote_plus(_strip_invisible(str(s).strip()))
+
 def _extract_key(body: dict) -> str:
     """SMM panels vary: key, apikey, api_key, or query-only."""
     for name in (
@@ -54,7 +62,7 @@ def _extract_key(body: dict) -> str:
     ):
         v = body.get(name)
         if v is not None and _normalize_form_value(v) != "":
-            return unquote_plus(_normalize_form_value(v).strip())
+            return _clean_api_key(_normalize_form_value(v))
     return ""
 
 def _extract_action(body: dict) -> str:
@@ -78,11 +86,17 @@ def _merge_query_params(request: Request, body: dict) -> dict:
 
 async def _read_body(request: Request) -> dict:
     """
-    Read body once. SMM panels use JSON, application/x-www-form-urlencoded, or multipart;
-    using request.form() first then request.json() can fail to read the body correctly.
+    SMM panels send application/x-www-form-urlencoded: use Starlette's form() first.
+    Otherwise read raw (JSON, text/plain, missing Content-Type, UTF-8 BOM, etc.).
     """
     ct = (request.headers.get("content-type") or "").lower()
     if "multipart/form-data" in ct:
+        try:
+            form = await request.form()
+            return {k: _normalize_form_value(v) for k, v in form.items()}
+        except Exception:
+            return {}
+    if "application/x-www-form-urlencoded" in ct:
         try:
             form = await request.form()
             return {k: _normalize_form_value(v) for k, v in form.items()}
@@ -94,7 +108,7 @@ async def _read_body(request: Request) -> dict:
         return {}
     if not raw:
         return {}
-    text = raw.decode("utf-8", "replace")
+    text = raw.decode("utf-8-sig", "replace")
     st = text.lstrip()
     if st.startswith("{") or st.startswith("["):
         try:
@@ -110,7 +124,7 @@ async def _read_body(request: Request) -> dict:
                 return data
         except json.JSONDecodeError:
             pass
-    if "=" in text and not text.lstrip().startswith(("{", "[")):
+    if "=" in text and not st.startswith(("{", "[")):
         try:
             parsed = parse_qs(text, keep_blank_values=True, strict_parsing=False)
             if parsed:
@@ -119,7 +133,24 @@ async def _read_body(request: Request) -> dict:
             pass
     return {}
 
+
+async def _find_user_by_api_key(key: str):
+    """Exact match, then case-insensitive (hex case varies between panels / copy-paste)."""
+    if not key:
+        return None
+    k = _clean_api_key(key)
+    if not k:
+        return None
+    u = await db.users.find_one({"apiKey": k})
+    if u:
+        return u if u.get("status") != "banned" else None
+    u = await db.users.find_one({"apiKey": {"$regex": f"^{re.escape(k)}$", "$options": "i"}})
+    if u and u.get("status") == "banned":
+        return None
+    return u
+
 @router.api_route("/v2", methods=["GET", "POST", "PUT"])
+@router.api_route("/v2/", methods=["GET", "POST", "PUT"])
 async def api_v2_handler(request: Request):
     """
     Reseller API v2 endpoint
@@ -151,9 +182,8 @@ async def api_v2_handler(request: Request):
             response = _err("Invalid API key")
             return response
 
-        # Match by api key; only block banned accounts (older records may lack status)
-        user = await db.users.find_one({"apiKey": key})
-        if not user or user.get("status") == "banned":
+        user = await _find_user_by_api_key(key)
+        if not user:
             response = _err("Invalid API key")
             return response
 
