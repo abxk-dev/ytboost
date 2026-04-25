@@ -348,7 +348,10 @@ async def api_v2_handler(request: Request):
                 response = _err("Insufficient balance")
                 return _v2_json(response)
 
-            fulfillment = service.get("fulfillmentType", "manual")
+            from backend.services.workflow_engine import find_active_workflow_for_service, process_workflow_order
+
+            active_workflow = await find_active_workflow_for_service(db, svc_obj_id)
+            fulfillment = "workflow" if active_workflow else service.get("fulfillmentType", "manual")
             provider_name = ""
             provider_order_id = ""
             provider_error = ""
@@ -411,12 +414,13 @@ async def api_v2_handler(request: Request):
                 "link": link,
                 "quantity": qty_for_order,
                 "charge": round(float(charge), 4),
-                "status": "Pending",
+                "status": "Processing" if fulfillment == "workflow" else "Pending",
                 "startCount": 0,
                 "remains": qty_for_order,
                 "customData": "",
                 "duration": "",
                 "fulfillmentType": fulfillment,
+                "workflowJobId": None,
                 "providerName": provider_name,
                 "providerOrderId": provider_order_id,
                 "providerError": provider_error,
@@ -428,6 +432,15 @@ async def api_v2_handler(request: Request):
                 "createdAt": now,
             }
             insert = await db.orders.insert_one(order_doc)
+            order_doc["_id"] = insert.inserted_id
+            if fulfillment == "workflow":
+                try:
+                    await process_workflow_order(db, order_doc)
+                except Exception as ex:
+                    await db.orders.update_one(
+                        {"_id": insert.inserted_id},
+                        {"$set": {"status": "Failed", "providerError": str(ex)[:2000], "providerResponse": str(ex)[:2000]}},
+                    )
 
             await db.transactions.insert_one({
                 "userId": user_id,

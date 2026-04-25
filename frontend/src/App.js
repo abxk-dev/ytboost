@@ -49,6 +49,7 @@ import AdminFundRequests from "./pages/admin/AdminFundRequests";
 import AdminCryptoSettings from "./pages/admin/AdminCryptoSettings";
 import AdminSettings from "./pages/admin/AdminSettings";
 import AdminApiProviders from "./pages/admin/AdminApiProviders";
+import AdminWorkflows from "./pages/admin/AdminWorkflows";
 import AdminFinanceRevenue from "./pages/admin/AdminFinanceRevenue";
 import AdminFinanceTransactions from "./pages/admin/AdminFinanceTransactions";
 import AdminFinanceRefunds from "./pages/admin/AdminFinanceRefunds";
@@ -173,6 +174,7 @@ function App() {
                 <Route index element={<AdminDashboard />} />
                 <Route path="categories" element={<AdminCategories />} />
                 <Route path="services" element={<AdminServices />} />
+                <Route path="workflows" element={<AdminWorkflows />} />
                 <Route path="api-providers" element={<AdminApiProviders />} />
                 <Route path="orders" element={<AdminOrders />} />
                 <Route path="users" element={<AdminUsers />} />

@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../../components/ui/dialog';
 import { Loader2, Search, Plus, ExternalLink, ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import WorkflowStatusDialog from '../../components/WorkflowStatusDialog';
 
 export default function Orders() {
   const [orders, setOrders] = useState([]);
@@ -20,6 +21,8 @@ export default function Orders() {
   const [refillDialogOpen, setRefillDialogOpen] = useState(false);
   const [refillOrder, setRefillOrder] = useState(null);
   const [refilling, setRefilling] = useState(false);
+  const [workflowDialogOpen, setWorkflowDialogOpen] = useState(false);
+  const [workflowOrderId, setWorkflowOrderId] = useState('');
 
   const statusColors = {
     Pending: 'bg-amber-100 text-amber-700 border-amber-200',
@@ -65,6 +68,10 @@ export default function Orders() {
   };
 
   const formatDate = (dateStr) => new Date(dateStr).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const openWorkflowStatus = (orderId) => {
+    setWorkflowOrderId(orderId);
+    setWorkflowDialogOpen(true);
+  };
 
   return (
     <div className="space-y-6" data-testid="orders-page">
@@ -117,7 +124,18 @@ export default function Orders() {
                           {order.link.slice(0, 30)}...<ExternalLink className="w-3 h-3 flex-shrink-0" />
                         </a>
                       </td>
-                      <td className="py-4 px-4 text-sm text-[#111827] font-medium max-w-[200px] truncate">{order.serviceName}</td>
+                      <td className="py-4 px-4 text-sm text-[#111827] font-medium max-w-[240px] truncate">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="truncate">{order.serviceName}</span>
+                          {(order.fulfillmentType === 'workflow' || order.workflowJobId) && (
+                            <button type="button" onClick={() => openWorkflowStatus(order.id)} title="Split Order status">
+                              <Badge className="bg-[#7c3aed]/10 text-[#7c3aed] border-[#7c3aed]/20 border text-[10px] px-2 py-0.5">
+                                Split
+                              </Badge>
+                            </button>
+                          )}
+                        </div>
+                      </td>
                       <td className="py-4 px-4 text-sm text-[#6b7280]">{order.quantity.toLocaleString()}</td>
                       <td className="py-4 px-4 text-sm text-[#111827] font-medium">${order.charge.toFixed(4)}</td>
                       <td className="py-4 px-4">
@@ -178,6 +196,13 @@ export default function Orders() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <WorkflowStatusDialog
+        open={workflowDialogOpen}
+        onOpenChange={setWorkflowDialogOpen}
+        orderId={workflowOrderId}
+        mode="user"
+      />
     </div>
   );
 }

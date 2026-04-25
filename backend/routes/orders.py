@@ -118,14 +118,19 @@ async def create_order(request: Request, data: OrderCreate):
     new_balance = current_balance - charge
     await db.users.update_one({'_id': user_id}, {'$set': {'balance': new_balance}})
     
+    from backend.services.workflow_engine import find_active_workflow_for_service, process_workflow_order
+
+    active_workflow = await find_active_workflow_for_service(db, service_id)
+
     # Create order
-    fulfillment = service.get('fulfillmentType', 'manual')
+    fulfillment = 'workflow' if active_workflow else service.get('fulfillmentType', 'manual')
     provider_name = ''
     provider_order_id = ''
     provider_error = ''
     provider_http_status = None
     provider_response = ''
     provider_last_attempt_at = None
+    workflow_job_id = None
     
     if fulfillment == 'auto' and service.get('providerId'):
         provider = await db.api_providers.find_one({'_id': service['providerId']})
@@ -187,12 +192,13 @@ async def create_order(request: Request, data: OrderCreate):
         'link': data.link,
         'quantity': data.quantity,
         'charge': round(charge, 4),
-        'status': 'Pending',
+        'status': 'Processing' if fulfillment == 'workflow' else 'Pending',
         'startCount': 0,
         'remains': data.quantity,
         'customData': data.customData or '',
         'duration': data.duration or '',
         'fulfillmentType': fulfillment,
+        'workflowJobId': None,
         'providerName': provider_name,
         'providerOrderId': provider_order_id,
         'providerError': provider_error,
@@ -204,6 +210,18 @@ async def create_order(request: Request, data: OrderCreate):
     }
     
     result = await db.orders.insert_one(order_doc)
+    order_doc['_id'] = result.inserted_id
+
+    if fulfillment == 'workflow':
+        try:
+            job = await process_workflow_order(db, order_doc)
+            if job and job.get("_id"):
+                workflow_job_id = str(job["_id"])
+        except Exception as e:
+            await db.orders.update_one(
+                {"_id": result.inserted_id},
+                {"$set": {"status": "Failed", "providerError": str(e)[:2000], "providerResponse": str(e)[:2000]}},
+            )
     
     # Create debit transaction
     await db.transactions.insert_one({
@@ -222,7 +240,9 @@ async def create_order(request: Request, data: OrderCreate):
         'link': data.link,
         'quantity': data.quantity,
         'charge': round(charge, 4),
-        'status': 'Pending',
+        'status': 'Processing' if fulfillment == 'workflow' else 'Pending',
+        'fulfillmentType': fulfillment,
+        'workflowJobId': workflow_job_id,
         'newBalance': new_balance
     }
 
@@ -269,6 +289,7 @@ async def get_user_orders(request: Request, page: int = 1, limit: int = 20, stat
             'refillEnabled': service.get('refillEnabled', False) if service else False,
             'refillHistory': order.get('refillHistory', []),
             'fulfillmentType': order.get('fulfillmentType', 'manual'),
+            'workflowJobId': str(order.get('workflowJobId')) if order.get('workflowJobId') else '',
             'providerName': order.get('providerName', ''),
             'providerOrderId': order.get('providerOrderId', ''),
             'providerError': order.get('providerError', ''),
@@ -348,6 +369,8 @@ async def get_order(request: Request, order_id: str):
         'status': order['status'],
         'startCount': order.get('startCount', 0),
         'remains': order.get('remains', 0),
+        'fulfillmentType': order.get('fulfillmentType', 'manual'),
+        'workflowJobId': str(order.get('workflowJobId')) if order.get('workflowJobId') else '',
         'createdAt': order['createdAt']
     }
 
@@ -423,6 +446,7 @@ async def admin_get_orders(request: Request, page: int = 1, limit: int = 50, sta
             'duration': order.get('duration', ''),
             'refillHistory': order.get('refillHistory', []),
             'fulfillmentType': order.get('fulfillmentType', 'manual'),
+            'workflowJobId': str(order.get('workflowJobId')) if order.get('workflowJobId') else '',
             'providerName': provider_name,
             'providerOrderId': provider_order_id,
             'providerError': provider_error,

@@ -11,6 +11,7 @@ import { Input } from '../../components/ui/input';
 import { Checkbox } from '../../components/ui/checkbox';
 import { Loader2, ShoppingCart, ChevronLeft, ChevronRight, ExternalLink, ChevronDown, RefreshCw, StickyNote, Ban, Download } from 'lucide-react';
 import { toast } from 'sonner';
+import WorkflowStatusDialog from '../../components/WorkflowStatusDialog';
 
 export default function AdminOrders() {
   const { theme } = useAdminTheme();
@@ -38,6 +39,8 @@ export default function AdminOrders() {
   const [providerIdDraft, setProviderIdDraft] = useState('');
   const [providerOverrideSaving, setProviderOverrideSaving] = useState(false);
   const [resendOneId, setResendOneId] = useState(null);
+  const [workflowDialogOpen, setWorkflowDialogOpen] = useState(false);
+  const [workflowOrderId, setWorkflowOrderId] = useState('');
 
   const statusColors = {
     Pending: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
@@ -64,6 +67,11 @@ export default function AdminOrders() {
       setLoading(false);
     }
   }, [page, statusFilter]);
+
+  const openWorkflowStatus = (orderId) => {
+    setWorkflowOrderId(orderId);
+    setWorkflowDialogOpen(true);
+  };
 
   useEffect(() => { fetchOrders(); }, [fetchOrders]);
 
@@ -312,11 +320,20 @@ export default function AdminOrders() {
                             <p className={`text-xs ${c.textMuted}`}>{order.userEmail}</p>
                           </div>
                         </td>
-                        <td className={`py-4 px-4 text-sm ${c.textSecondary} max-w-[150px] truncate`} title={order.serviceNumber != null ? `Service id: ${order.serviceNumber}` : undefined}>
-                          {order.serviceName}
-                          {order.serviceNumber != null && (
-                            <span className="ml-1.5 text-[10px] font-mono text-[#7c3aed] align-middle">·{order.serviceNumber}</span>
-                          )}
+                        <td className={`py-4 px-4 text-sm ${c.textSecondary} max-w-[200px] truncate`} title={order.serviceNumber != null ? `Service id: ${order.serviceNumber}` : undefined}>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="truncate">{order.serviceName}</span>
+                            {(order.fulfillmentType === 'workflow' || order.workflowJobId) && (
+                              <button type="button" onClick={() => openWorkflowStatus(order.id)} title="Workflow status">
+                                <Badge className="bg-[#7c3aed]/20 text-[#c4b5fd] border-[#7c3aed]/30 border text-[10px] px-2 py-0.5">
+                                  W
+                                </Badge>
+                              </button>
+                            )}
+                            {order.serviceNumber != null && (
+                              <span className="text-[10px] font-mono text-[#7c3aed] align-middle">·{order.serviceNumber}</span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-4 px-4">
                           <a href={order.link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-sm text-[#7c3aed] hover:text-[#8b5cf6]">
@@ -551,6 +568,13 @@ export default function AdminOrders() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <WorkflowStatusDialog
+        open={workflowDialogOpen}
+        onOpenChange={setWorkflowDialogOpen}
+        orderId={workflowOrderId}
+        mode="admin"
+      />
     </div>
   );
 }

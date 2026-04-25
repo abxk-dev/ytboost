@@ -24,7 +24,7 @@ from pymongo.errors import PyMongoError
 from backend.routes import (
     auth, admin_auth, categories, services, orders, crypto,
     users, transactions, settings, apiv2, api_providers,
-    support, system, communications
+    support, system, communications, workflows
 )
 
 from backend.services.blockchain_scheduler import (
@@ -95,6 +95,7 @@ api_providers.set_db(db)
 support.set_db(db)
 system.set_db(db)
 communications.set_db(db)
+workflows.set_db(db)
 
 # Routes
 # Routes
@@ -114,6 +115,7 @@ app.include_router(api_providers.router, prefix="/api")
 app.include_router(support.router, prefix="/api")
 app.include_router(system.router, prefix="/api")
 app.include_router(communications.router, prefix="/api")
+app.include_router(workflows.router, prefix="/api")
 
 @app.get("/api")
 async def root():

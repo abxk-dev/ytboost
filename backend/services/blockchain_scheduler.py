@@ -9,6 +9,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from backend.services.bep20_monitor import check_bep20_payment
 from backend.services.webhook_processor import credit_payment
+from backend.services.workflow_engine import refresh_job_suborders_status, resume_waiting_job_if_due
 
 scheduler = None
 db_instance = None
@@ -251,6 +252,50 @@ async def auto_complete_old_orders():
     except Exception as e:
         print(f"Auto completion error: {e}")
 
+async def poll_workflow_suborders():
+    global db_instance
+    if db_instance is None:
+        return
+    try:
+        jobs = await db_instance.workflow_order_jobs.find(
+            {"status": {"$in": ["running", "waiting"]}}
+        ).sort("updatedAt", -1).limit(200).to_list(200)
+        if not jobs:
+            return
+        for j in jobs:
+            try:
+                await refresh_job_suborders_status(db_instance, j)
+            except Exception:
+                continue
+    except Exception as e:
+        print(f"Workflow suborder poll error: {e}")
+
+
+async def resume_waiting_workflow_jobs():
+    global db_instance
+    if db_instance is None:
+        return
+    try:
+        now = datetime.now(timezone.utc)
+        jobs = await db_instance.workflow_order_jobs.find(
+            {
+                "status": "waiting",
+                "$or": [
+                    {"scheduledFor": {"$lte": now}},
+                    {"scheduledFor": None},
+                ],
+            }
+        ).sort("createdAt", 1).limit(200).to_list(200)
+        if not jobs:
+            return
+        for j in jobs:
+            try:
+                await resume_waiting_job_if_due(db_instance, j)
+            except Exception:
+                continue
+    except Exception as e:
+        print(f"Workflow resume error: {e}")
+
 def start_blockchain_scheduler(db, socket_manager=None):
     """Start the blockchain monitoring scheduler"""
     global scheduler, db_instance, socket_manager_instance
@@ -297,6 +342,20 @@ def start_blockchain_scheduler(db, socket_manager=None):
         auto_complete_old_orders,
         IntervalTrigger(hours=1),
         id='auto_complete_orders',
+        replace_existing=True
+    )
+
+    scheduler.add_job(
+        resume_waiting_workflow_jobs,
+        IntervalTrigger(minutes=1),
+        id='resume_waiting_workflow_jobs',
+        replace_existing=True
+    )
+
+    scheduler.add_job(
+        poll_workflow_suborders,
+        IntervalTrigger(minutes=5),
+        id='poll_workflow_suborders',
         replace_existing=True
     )
     
