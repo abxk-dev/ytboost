@@ -6,7 +6,7 @@ Uses atomic transactions to prevent double-crediting
 from datetime import datetime, timezone
 from bson import ObjectId
 
-async def credit_payment(session_id: str, amount: float, tx_hash: str, db, socket_manager=None):
+async def credit_payment(session_id: str, amount: float, tx_hash: str, db):
     """
     Credit user balance after payment is confirmed
     Uses atomic operations to prevent double-crediting
@@ -16,7 +16,6 @@ async def credit_payment(session_id: str, amount: float, tx_hash: str, db, socke
         amount: Amount to credit
         tx_hash: Transaction hash
         db: MongoDB database instance
-        socket_manager: Socket.io manager for real-time updates
     """
     try:
         # Get session with user
@@ -138,27 +137,6 @@ async def credit_payment(session_id: str, amount: float, tx_hash: str, db, socke
                             'details': f'Referral earning ${commission:.2f}',
                             'createdAt': datetime.now(timezone.utc)
                         })
-        
-        # Emit socket events
-        if socket_manager:
-            # Emit to payment session room
-            await socket_manager.emit(
-                'payment_credited',
-                {
-                    'sessionId': session_id,
-                    'amount': amount,
-                    'newBalance': new_balance,
-                    'txHash': tx_hash
-                },
-                room=f'payment-session-{session_id}'
-            )
-            
-            # Emit to user's personal room for balance update
-            await socket_manager.emit(
-                'balance_updated',
-                {'balance': new_balance},
-                room=f'user-{str(user_id)}'
-            )
         
         print(f"✅ Credited ${amount} USDT to user {user_id}. TX: {tx_hash}")
         return True

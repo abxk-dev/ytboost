@@ -37,14 +37,13 @@ def get_web3():
     """Get Web3 instance connected to BSC"""
     return Web3(Web3.HTTPProvider(BSC_RPC_URL))
 
-async def check_bep20_payment(session: dict, db, socket_manager=None):
+async def check_bep20_payment(session: dict, db):
     """
     Check if a BEP20 USDT payment has been received for a session
     
     Args:
         session: CryptoPaymentSession document
         db: MongoDB database instance
-        socket_manager: Socket.io manager for real-time updates
     
     Returns:
         dict with txHash, amount, confirmations if payment found, else None
@@ -127,19 +126,6 @@ async def check_bep20_payment(session: dict, db, socket_manager=None):
                         }
                     }
                 )
-                
-                # Emit socket event if socket manager is available
-                if socket_manager:
-                    await socket_manager.emit(
-                        'payment_detected',
-                        {
-                            'sessionId': session_id,
-                            'txHash': tx_hash,
-                            'amount': amount,
-                            'confirmations': confirmations
-                        },
-                        room=f'payment-session-{session_id}'
-                    )
                 
                 print(f"✅ Payment detected for session {session_id}: {amount} USDT, TX: {tx_hash}")
                 

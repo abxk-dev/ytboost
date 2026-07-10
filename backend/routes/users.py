@@ -39,15 +39,10 @@ class NotifyUserRequest(BaseModel):
 
 # Dependency injection placeholder
 db = None
-socket_manager = None
 
 def set_db(database):
     global db
     db = database
-
-def set_socket_manager(manager):
-    global socket_manager
-    socket_manager = manager
 
 # Admin routes
 @router.get("/admin/users")
@@ -157,8 +152,6 @@ async def admin_bulk_add_balance(request: Request, data: BulkBalanceUpdate):
             'details': f'Admin bulk credit: {float(data.amount):.2f}',
             'createdAt': datetime.now(timezone.utc)
         })
-        if socket_manager:
-            await socket_manager.emit('balance_updated', {'balance': new_balance}, room=f'user-{str(u["_id"])}')
         updated += 1
 
     await log_admin_action(db, request, admin, "USER_BULK_BALANCE_ADD", f"Users: {updated}, Amount: {float(data.amount):.2f}")
@@ -404,14 +397,6 @@ async def admin_update_user_balance(request: Request, user_id: str, data: Balanc
         'balanceAfter': new_balance,
         'createdAt': datetime.now(timezone.utc)
     })
-    
-    # Emit socket event to update user's balance in UI
-    if socket_manager:
-        await socket_manager.emit(
-            'balance_updated',
-            {'balance': new_balance},
-            room=f'user-{user_id}'
-        )
     
     return {
         'message': 'Balance updated',

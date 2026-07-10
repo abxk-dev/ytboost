@@ -2,6 +2,14 @@
   "version": 2,
   "builds": [
     {
+      "src": "api/index.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "api/cron/*.py",
+      "use": "@vercel/python"
+    },
+    {
       "src": "frontend/package.json",
       "use": "@vercel/static-build",
       "config": {
@@ -9,7 +17,48 @@
       }
     }
   ],
-  "rewrites": [
-    { "source": "/(.*)", "destination": "/index.html" }
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/v2(.*)",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/((?!api/|v2/|_next/|static/).*)",
+      "dest": "/index.html"
+    }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/check_payments",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/expire_sessions",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/check_orders",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/check_health",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/cron/auto_complete",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/resume_workflows",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/poll_suborders",
+      "schedule": "*/5 * * * *"
+    }
   ]
 }

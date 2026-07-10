@@ -24,15 +24,10 @@ class RejectFundRequest(BaseModel):
 
 # Dependency injection placeholder
 db = None
-socket_manager = None
 
 def set_db(database):
     global db
     db = database
-
-def set_socket_manager(manager):
-    global socket_manager
-    socket_manager = manager
 
 # STRICT OVERRIDE - Always return the correct fixed wallet
 STRICT_WALLET = "0x981909a9f8a06a7886bc35b393a66da4f4d30622"
@@ -332,7 +327,7 @@ async def verify_payment_hash(request: Request, data: VerifyTxHashRequest):
 
     # 8. Credit if fully confirmed
     if confirmations >= required_confirms:
-        await credit_payment(str(session_id), amount, data.txHash, db, socket_manager)
+        await credit_payment(str(session_id), amount, data.txHash, db)
         return {
             "message": "Payment verified and credited successfully",
             "status": "credited",
@@ -550,7 +545,7 @@ async def admin_approve_fund_request(request: Request, session_id: str):
     amount = session.get('receivedAmount') or session['expectedAmount']
     tx_hash = session.get('txHash') or 'MANUAL_APPROVAL'
 
-    await credit_payment(session_id, amount, tx_hash, db, socket_manager)
+    await credit_payment(session_id, amount, tx_hash, db)
 
     await log_admin_action(
         db, request, admin,

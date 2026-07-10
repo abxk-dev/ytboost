@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../services/api';
-import { useSocket } from '../../hooks/useSocket';
 import { useAuth } from '../../context/AuthContext';
 import { Card, CardContent } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -14,7 +13,6 @@ export default function PaymentSession() {
   const { sessionId } = useParams();
   const navigate = useNavigate();
   const { updateBalance } = useAuth();
-  const { joinPaymentSession, leavePaymentSession, onPaymentDetected, onPaymentCredited } = useSocket();
   
   const [session, setSession] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -30,7 +28,23 @@ export default function PaymentSession() {
     try {
       const { data } = await api.get(`/crypto/session/${sessionId}`);
       setSession(data);
+      
+      // Check if status changed
+      const prevStatus = status;
       setStatus(data.status);
+      
+      // Handle status transitions
+      if (prevStatus !== 'credited' && data.status === 'credited') {
+        updateBalance(data.balance || data.newBalance);
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+        toast.success(`$${data.receivedAmount || data.expectedAmount} credited to your balance!`);
+      } else if (prevStatus !== 'detected' && (data.status === 'detecting' || data.status === 'detected')) {
+        toast.success('Payment detected on blockchain!');
+      }
       
       // Calculate time left
       if (data.expiresAt) {
@@ -51,66 +65,13 @@ export default function PaymentSession() {
     } finally {
       setLoading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, status, updateBalance]);
 
   useEffect(() => {
     fetchSession();
-    joinPaymentSession(sessionId);
+  }, [fetchSession]);
 
-    return () => {
-      leavePaymentSession(sessionId);
-    };
-  }, [sessionId, fetchSession, joinPaymentSession, leavePaymentSession]);
-
-  // Socket event handlers
-  useEffect(() => {
-    const unsubDetected = onPaymentDetected((data) => {
-      if (data.sessionId === sessionId || !data.sessionId) {
-        setStatus('detected');
-        setSession(prev => prev ? { ...prev, txHash: data.txHash, receivedAmount: data.amount, confirmations: data.confirmations } : prev);
-        toast.success('Payment detected on blockchain!');
-      }
-    });
-
-    const unsubCredited = onPaymentCredited((data) => {
-      if (data.sessionId === sessionId || !data.sessionId) {
-        setStatus('credited');
-        setSession(prev => prev ? { ...prev, ...data } : prev);
-        updateBalance(data.newBalance);
-        
-        // Trigger confetti
-        confetti({
-          particleCount: 100,
-          spread: 70,
-          origin: { y: 0.6 }
-        });
-        
-        toast.success(`$${data.amount} credited to your balance!`);
-      }
-    });
-
-    return () => {
-      unsubDetected();
-      unsubCredited();
-    };
-  }, [sessionId, onPaymentDetected, onPaymentCredited, updateBalance]);
-
-  // Countdown timer
-  useEffect(() => {
-    if (expiresAtMs == null || status === 'credited') return;
-
-    const tick = () => {
-      const now = Date.now();
-      const diff = Math.max(0, Math.floor((expiresAtMs - now) / 1000));
-      setTimeLeft(diff);
-    };
-
-    tick();
-    const timer = setInterval(tick, 1000);
-    return () => clearInterval(timer);
-  }, [expiresAtMs, status]);
-
-  // Poll for updates as fallback
+  // Poll for updates every 10 seconds
   useEffect(() => {
     if (status === 'credited' || status === 'expired') return;
 
@@ -120,6 +81,18 @@ export default function PaymentSession() {
 
     return () => clearInterval(pollInterval);
   }, [status, fetchSession]);
+
+    useEffect(() => {
+      const tick = () => {
+        const now = Date.now();
+        const diff = Math.max(0, Math.floor((expiresAtMs - now) / 1000));
+        setTimeLeft(diff);
+      };
+
+      tick();
+      const timer = setInterval(tick, 1000);
+      return () => clearInterval(timer);
+    }, [expiresAtMs, status]);
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60);

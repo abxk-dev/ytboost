@@ -13,11 +13,10 @@ from backend.services.workflow_engine import refresh_job_suborders_status, resum
 
 scheduler = None
 db_instance = None
-socket_manager_instance = None
 
 async def check_pending_sessions():
     """Check all pending BEP20 payment sessions"""
-    global db_instance, socket_manager_instance
+    global db_instance
     
     if db_instance is None:
         print("Database not initialized for scheduler")
@@ -48,7 +47,7 @@ async def check_pending_sessions():
         for i in range(0, len(sessions), 5):
             chunk = sessions[i:i+5]
             tasks = [
-                check_bep20_payment(session, db_instance, socket_manager_instance)
+                check_bep20_payment(session, db_instance)
                 for session in chunk
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -62,8 +61,7 @@ async def check_pending_sessions():
                             str(session['_id']),
                             result['amount'],
                             result['txHash'],
-                            db_instance,
-                            socket_manager_instance
+                            db_instance
                         )
                         
     except Exception as e:
@@ -296,12 +294,11 @@ async def resume_waiting_workflow_jobs():
     except Exception as e:
         print(f"Workflow resume error: {e}")
 
-def start_blockchain_scheduler(db, socket_manager=None):
+def start_blockchain_scheduler(db):
     """Start the blockchain monitoring scheduler"""
-    global scheduler, db_instance, socket_manager_instance
+    global scheduler, db_instance
     
     db_instance = db
-    socket_manager_instance = socket_manager
     
     scheduler = AsyncIOScheduler()
     

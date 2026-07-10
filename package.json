@@ -7,9 +7,9 @@
   },
   "main": "index.js",
   "scripts": {
-    "dev": "concurrently \"python3 -m uvicorn backend.server:application --host 0.0.0.0 --port 8000\" \"cd frontend && npm start\"",
+    "dev": "concurrently \"python3 -m uvicorn backend.server:app --host 0.0.0.0 --port 8080\" \"cd frontend && npm start\"",
     "frontend": "cd frontend && npm start",
-    "backend": "python3 -m uvicorn backend.server:application --host 0.0.0.0 --port 8000"
+    "backend": "python3 -m uvicorn backend.server:app --host 0.0.0.0 --port 8080"
   },
   "keywords": [],
   "author": "",

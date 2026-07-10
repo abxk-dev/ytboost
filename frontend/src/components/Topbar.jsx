@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useSocket } from '../hooks/useSocket';
 import api from '../services/api';
 import { Menu, Plus, ChevronDown, LogOut, User, Settings, Bell } from 'lucide-react';
 import {
@@ -15,17 +14,15 @@ import {
 export default function Topbar({ onMenuClick }) {
   const { user, logout, updateBalance } = useAuth();
   const navigate = useNavigate();
-  const { joinUserRoom, onBalanceUpdated } = useSocket();
   const [balance, setBalance] = useState(user?.balance || 0);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
     if (user?.id) {
-      joinUserRoom(user.id);
       setBalance(user.balance || 0);
     }
-  }, [user, joinUserRoom]);
+  }, [user]);
 
   useEffect(() => {
     const fetchNotifications = async () => {
@@ -43,13 +40,25 @@ export default function Topbar({ onMenuClick }) {
     return () => clearInterval(id);
   }, [user?.id]);
 
+  // Poll for balance updates every 30 seconds
   useEffect(() => {
-    const unsubscribe = onBalanceUpdated((data) => {
-      setBalance(data.balance);
-      updateBalance(data.balance);
-    });
-    return unsubscribe;
-  }, [onBalanceUpdated, updateBalance]);
+    if (!user?.id) return;
+    
+    const pollBalance = async () => {
+      try {
+        const { data } = await api.get('/auth/me');
+        if (data.balance !== undefined) {
+          setBalance(data.balance);
+          updateBalance(data.balance);
+        }
+      } catch {
+        // Ignore errors
+      }
+    };
+    
+    const id = setInterval(pollBalance, 30000);
+    return () => clearInterval(id);
+  }, [user?.id, updateBalance]);
 
   const handleLogout = async () => {
     await logout();

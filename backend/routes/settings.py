@@ -5,16 +5,10 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile, File
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
 import os
-import shutil
-import uuid
+import base64
 from backend.middleware.admin import get_request_ip
 
 router = APIRouter(tags=["Settings"])
-
-UPLOAD_DIR = os.environ.get('UPLOAD_DIR', './uploads')
-
-# Ensure upload directory exists
-os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Dependency injection placeholder
 db = None
@@ -373,7 +367,7 @@ async def admin_revenue_series(request: Request, period: str = 'daily'):
 
 @router.post("/admin/settings/logo")
 async def admin_upload_logo(request: Request, file: UploadFile = File(...)):
-    """Upload site logo (admin)"""
+    """Upload site logo (admin) - stores as base64 in MongoDB"""
     from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
@@ -387,17 +381,12 @@ async def admin_upload_logo(request: Request, file: UploadFile = File(...)):
     if len(contents) > 2 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File too large. Max 2MB")
     
-    # Generate unique filename
-    ext = file.filename.split('.')[-1] if '.' in file.filename else 'png'
-    filename = f"logo_{uuid.uuid4().hex[:8]}.{ext}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    
-    # Save file
-    with open(filepath, 'wb') as f:
-        f.write(contents)
+    # Convert to base64 data URI
+    content_type = file.content_type
+    base64_data = base64.b64encode(contents).decode('utf-8')
+    logo_url = f"data:{content_type};base64,{base64_data}"
     
     # Update setting
-    logo_url = f"/uploads/{filename}"
     await db.site_settings.update_one(
         {'key': 'logo_url'},
         {'$set': {'value': logo_url, 'updatedAt': datetime.now(timezone.utc)}},
@@ -408,30 +397,26 @@ async def admin_upload_logo(request: Request, file: UploadFile = File(...)):
 
 @router.post("/admin/settings/favicon")
 async def admin_upload_favicon(request: Request, file: UploadFile = File(...)):
-    """Upload site favicon (admin)"""
+    """Upload site favicon (admin) - stores as base64 in MongoDB"""
     from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
     
     # Validate file type
     allowed_types = ['image/x-icon', 'image/png', 'image/svg+xml', 'image/vnd.microsoft.icon']
     content_type = file.content_type or ''
+    if content_type not in allowed_types:
+        raise HTTPException(status_code=400, detail="Invalid file type. Allowed: ico, png, svg")
     
     # Check file size (max 500KB)
     contents = await file.read()
     if len(contents) > 500 * 1024:
         raise HTTPException(status_code=400, detail="File too large. Max 500KB")
     
-    # Generate unique filename
-    ext = file.filename.split('.')[-1] if '.' in file.filename else 'ico'
-    filename = f"favicon_{uuid.uuid4().hex[:8]}.{ext}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-    
-    # Save file
-    with open(filepath, 'wb') as f:
-        f.write(contents)
+    # Convert to base64 data URI
+    base64_data = base64.b64encode(contents).decode('utf-8')
+    favicon_url = f"data:{content_type};base64,{base64_data}"
     
     # Update setting
-    favicon_url = f"/uploads/{filename}"
     await db.site_settings.update_one(
         {'key': 'favicon_url'},
         {'$set': {'value': favicon_url, 'updatedAt': datetime.now(timezone.utc)}},

@@ -3,7 +3,9 @@ function normalizeUrl(url) {
   return v.endsWith('/') ? v.slice(0, -1) : v;
 }
 
-const DEFAULT_API_BASE_URL = 'https://ytboost-production-801e.up.railway.app/api';
+// For Vercel serverless deployment, use relative URLs
+// Frontend and backend are on the same domain
+const DEFAULT_API_BASE_URL = '/api';
 
 export const DEBUG_API = import.meta.env.VITE_DEBUG_API === 'true';
 
@@ -14,9 +16,11 @@ export const API_BASE_URL = (() => {
   return `${base}/api`;
 })();
 
+// BACKEND_ORIGIN is no longer needed for Socket.io
+// Keeping for backward compatibility
 export const BACKEND_ORIGIN = (() => {
   try {
-    const u = new URL(API_BASE_URL);
+    const u = new URL(API_BASE_URL, window.location.origin);
     u.pathname = u.pathname.replace(/\/api$/, '');
     u.search = '';
     u.hash = '';
