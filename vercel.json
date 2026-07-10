@@ -2,12 +2,16 @@
   "version": 2,
   "routes": [
     {
-      "src": "/api/test",
-      "dest": "/api/minimal.py"
+      "src": "/api/health",
+      "dest": "/api/index.py"
     },
     {
       "src": "/api/(.*)",
       "dest": "/api/index.py"
+    },
+    {
+      "src": "/api/test",
+      "dest": "/api/minimal.py"
     },
     {
       "src": "/v2(.*)",
