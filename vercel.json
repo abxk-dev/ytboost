@@ -34,7 +34,7 @@
   "crons": [
     {
       "path": "/api/cron/run_all",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 0 * * *"
     }
   ]
 }
