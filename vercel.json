@@ -33,31 +33,7 @@
   ],
   "crons": [
     {
-      "path": "/api/cron/check_payments",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/cron/expire_sessions",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/check_orders",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/cron/check_health",
-      "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/cron/auto_complete",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/cron/resume_workflows",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/cron/poll_suborders",
+      "path": "/api/cron/run_all",
       "schedule": "*/5 * * * *"
     }
   ]
