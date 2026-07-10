@@ -5,6 +5,6 @@ from fastapi import FastAPI
 
 app = FastAPI()
 
-@app.get("/test")
+@app.get("/api/test")
 async def test():
     return {"status": "ok", "message": "Python runtime works"}
