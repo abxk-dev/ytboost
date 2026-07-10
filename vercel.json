@@ -1,4 +1,18 @@
 {
   "version": 2,
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/v2(.*)",
+      "dest": "/api/index.py"
+    },
+    {
+      "src": "/((?!api/|_next/|static/).*)",
+      "dest": "/index.html"
+    }
+  ],
   "crons": []
 }
