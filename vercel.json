@@ -23,10 +23,6 @@
       "dest": "/api/app.py"
     },
     {
-      "src": "/api/test",
-      "dest": "/api/minimal.py"
-    },
-    {
       "src": "/v2(.*)",
       "dest": "/api/app.py"
     },
