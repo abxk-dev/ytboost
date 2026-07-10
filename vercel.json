@@ -3,11 +3,11 @@
   "routes": [
     {
       "src": "/api/health",
-      "dest": "/api/index.py"
+      "dest": "/api/app.py"
     },
     {
       "src": "/api/(.*)",
-      "dest": "/api/index.py"
+      "dest": "/api/app.py"
     },
     {
       "src": "/api/test",
@@ -15,7 +15,7 @@
     },
     {
       "src": "/v2(.*)",
-      "dest": "/api/index.py"
+      "dest": "/api/app.py"
     },
     {
       "src": "/((?!api/|_next/|static/).*)",
