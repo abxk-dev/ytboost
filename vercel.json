@@ -27,10 +27,5 @@
       "dest": "/index.html"
     }
   ],
-  "crons": [
-    {
-      "path": "/api/cron/run_all",
-      "schedule": "0 0 * * *"
-    }
-  ]
+  "crons": []
 }
