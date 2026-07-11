@@ -1,5 +1,6 @@
 {
   "version": 2,
+  "outputDirectory": "frontend/build",
   "builds": [
     {
       "src": "api/*.py",
@@ -7,10 +8,7 @@
     },
     {
       "src": "frontend/package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "frontend/build"
-      }
+      "use": "@vercel/static-build"
     }
   ],
   "routes": [
@@ -28,7 +26,7 @@
     },
     {
       "src": "/((?!api/|_next/|static/).*)",
-      "dest": "/frontend/build/index.html"
+      "dest": "/index.html"
     }
   ],
   "crons": []
