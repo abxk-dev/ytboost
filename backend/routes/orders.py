@@ -739,6 +739,298 @@ async def admin_cancel_refund(request: Request, order_id: str):
     await log_admin_action(db, request, admin, "ORDER_CANCEL_REFUND", f"Order: {order_id}, Amount: {refund_amount:.2f}")
     return {'message': 'Order cancelled and refunded', 'refundAmount': refund_amount, 'newBalance': new_balance}
 
+class RefundBody(BaseModel):
+    mode: str = Field("full", pattern="^(full|remaining|custom)$")
+    amount: Optional[float] = None
+    reason: str = Field("", max_length=300)
+    keepStatus: bool = False  # refund only, do not change the order status
+
+class BulkRefundBody(BaseModel):
+    orderIds: list[str] = []
+    mode: str = Field("full", pattern="^(full|remaining)$")
+    reason: str = Field("", max_length=300)
+
+
+async def _refund_order(order: dict, mode: str, amount: Optional[float], reason: str, keep_status: bool = False) -> dict:
+    """Cancel + refund one order to the user's balance. Returns {'ok': bool, ...}. One refund per order."""
+    from pymongo import ReturnDocument
+    if order.get('refundedAt'):
+        return {'ok': False, 'error': 'Refund already issued'}
+    user = await db.users.find_one({'_id': order['userId']})
+    if not user:
+        return {'ok': False, 'error': 'User not found'}
+
+    charge = float(order.get('charge', 0) or 0)
+    qty = int(order.get('quantity') or 0)
+    remains = order.get('remains')
+    partial = False
+    if mode == 'remaining':
+        if qty > 0 and remains is not None and 0 < int(remains) < qty:
+            refund = round(charge * int(remains) / qty, 4)
+            partial = True
+        elif remains is not None and int(remains) <= 0 and order.get('status') == 'Completed':
+            return {'ok': False, 'error': 'Nothing left undelivered to refund'}
+        else:
+            refund = round(charge, 4)
+    elif mode == 'custom':
+        if amount is None or amount <= 0 or amount > charge + 1e-9:
+            return {'ok': False, 'error': f'Custom amount must be between 0 and {charge:.4f}'}
+        refund = round(float(amount), 4)
+        partial = refund < charge - 1e-9
+    else:
+        refund = round(charge, 4)
+    if refund <= 0:
+        return {'ok': False, 'error': 'Refund amount is zero'}
+
+    now = datetime.now(timezone.utc)
+    updated_user = await db.users.find_one_and_update(
+        {'_id': user['_id']}, {'$inc': {'balance': refund}}, return_document=ReturnDocument.AFTER
+    )
+    new_balance = float((updated_user or {}).get('balance', 0))
+    label = order.get('japOrderId') or str(order['_id'])
+    await db.transactions.insert_one({
+        'userId': user['_id'],
+        'type': 'credit',
+        'amount': refund,
+        'description': f"Refund for order #{label}",
+        'balanceAfter': new_balance,
+        'createdAt': now,
+    })
+    order_set = {
+        'refundedAt': now,
+        'refundAmount': refund,
+        'refundReason': reason or ('Partial refund' if partial else 'Refund for cancelled order'),
+        'refundMode': mode,
+    }
+    if not keep_status:
+        order_set['status'] = 'Partial' if partial else 'Cancelled'
+        order_set['cancelledAt'] = now
+    await db.orders.update_one({'_id': order['_id']}, {'$set': order_set})
+    await db.notifications.insert_one({
+        'userId': user['_id'],
+        'title': 'Refund issued',
+        'message': f"Order #{label}: ${refund:.2f} was refunded to your balance." + (f" Reason: {reason}" if reason else ''),
+        'type': 'info',
+        'read': False,
+        'createdAt': now,
+    })
+    return {'ok': True, 'amount': refund, 'newBalance': new_balance, 'partial': partial, 'userId': str(user['_id'])}
+
+
+@router.get("/admin/orders/list")
+async def admin_list_orders(
+    request: Request,
+    page: int = 1,
+    limit: int = 50,
+    status: str = None,
+    search: str = None,
+    userId: str = None,
+    provider: str = None,
+    fulfillment: str = None,
+    refunded: str = None,
+    date_from: str = None,
+    date_to: str = None,
+    sort: str = 'newest',
+):
+    """Admin orders list with search, filters, status counts and totals (single round of lookups)."""
+    from backend.middleware.admin import get_current_admin
+    await get_current_admin(request, db)
+
+    page = max(1, page)
+    limit = max(1, min(limit, 200))
+    clauses = []
+    if userId:
+        try:
+            clauses.append({'userId': ObjectId(userId)})
+        except Exception:
+            pass
+    if provider:
+        clauses.append({'providerName': provider})
+    if fulfillment in ('manual', 'auto', 'workflow'):
+        clauses.append({'fulfillmentType': fulfillment})
+    if refunded == 'yes':
+        clauses.append({'refundedAt': {'$ne': None, '$exists': True}})
+    elif refunded == 'no':
+        clauses.append({'$or': [{'refundedAt': None}, {'refundedAt': {'$exists': False}}]})
+    try:
+        if date_from:
+            clauses.append({'createdAt': {'$gte': datetime.strptime(date_from, '%Y-%m-%d')}})
+        if date_to:
+            from datetime import timedelta
+            clauses.append({'createdAt': {'$lt': datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)}})
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dates must be YYYY-MM-DD")
+
+    s = (search or '').strip()
+    if s:
+        rx = {'$regex': re.escape(s), '$options': 'i'}
+        ors = [{'link': rx}, {'providerOrderId': s}, {'note': rx}]
+        digits = s.lstrip('#')
+        if digits.isdigit():
+            ors.append({'japOrderId': int(digits)})
+        if re.fullmatch(r'[0-9a-fA-F]{24}', s):
+            ors.append({'_id': ObjectId(s)})
+        match_users = await db.users.find({'$or': [{'email': rx}, {'name': rx}]}, {'_id': 1}).to_list(500)
+        if match_users:
+            ors.append({'userId': {'$in': [u['_id'] for u in match_users]}})
+        match_services = await db.services.find({'name': rx}, {'_id': 1}).to_list(500)
+        if match_services:
+            ors.append({'serviceId': {'$in': [x['_id'] for x in match_services]}})
+        clauses.append({'$or': ors})
+
+    base_query = {'$and': clauses} if clauses else {}
+    query = {'$and': clauses + [{'status': status}]} if status else base_query
+
+    # status chips use the same filters except the status itself
+    counts = {}
+    async for row in db.orders.aggregate([{'$match': base_query}, {'$group': {'_id': '$status', 'n': {'$sum': 1}}}]):
+        counts[row['_id']] = row['n']
+    total_all = sum(counts.values())
+    total = await db.orders.count_documents(query)
+    charge_rows = await db.orders.aggregate([{'$match': query}, {'$group': {'_id': None, 'sum': {'$sum': '$charge'}}}]).to_list(1)
+    total_charge = float(charge_rows[0]['sum']) if charge_rows else 0.0
+
+    sort_map = {
+        'newest': [('createdAt', -1)],
+        'oldest': [('createdAt', 1)],
+        'charge_desc': [('charge', -1)],
+        'charge_asc': [('charge', 1)],
+    }
+    orders = await db.orders.find(query).sort(sort_map.get(sort, sort_map['newest'])).skip((page - 1) * limit).limit(limit).to_list(limit)
+
+    svc_ids = list({o['serviceId'] for o in orders if o.get('serviceId')})
+    user_ids = list({o['userId'] for o in orders if o.get('userId')})
+    services = {x['_id']: x for x in await db.services.find({'_id': {'$in': svc_ids}}).to_list(len(svc_ids) or 1)}
+    users = {x['_id']: x for x in await db.users.find({'_id': {'$in': user_ids}}, {'name': 1, 'email': 1, 'balance': 1}).to_list(len(user_ids) or 1)}
+    providers = {p['_id']: p for p in await db.api_providers.find({}).to_list(500)}
+
+    result = []
+    for order in orders:
+        service = services.get(order.get('serviceId'))
+        user = users.get(order.get('userId'))
+        provider_name = order.get('providerName', '')
+        provider_order_id = order.get('providerOrderId', '')
+        provider_error = order.get('providerError', '')
+        computed = ''
+        if order.get('fulfillmentType') == 'auto' and not provider_order_id and not provider_error:
+            if not service:
+                computed = 'Service not found'
+            else:
+                prov = providers.get(service.get('providerId')) if service.get('providerId') else None
+                if not service.get('providerId'):
+                    computed = 'Provider not configured for this service'
+                elif not service.get('providerServiceId'):
+                    computed = 'Provider Service ID missing'
+                elif not prov or not prov.get('status', True):
+                    computed = 'Provider not found or disabled'
+                elif not (prov.get('apiUrl') or '').strip() or not (prov.get('apiKey') or '').strip():
+                    computed = 'Provider API URL/Key missing'
+                else:
+                    computed = 'Order not sent to provider yet'
+                if prov and not provider_name:
+                    provider_name = prov.get('name', '')
+        result.append({
+            'id': str(order['_id']),
+            'orderNumber': order.get('japOrderId'),
+            'userId': str(order['userId']),
+            'userName': user['name'] if user else 'Unknown',
+            'userEmail': user['email'] if user else 'Unknown',
+            'userBalance': float(user.get('balance', 0)) if user else 0,
+            'serviceId': str(order['serviceId']),
+            'serviceName': service['name'] if service else 'Unknown',
+            'serviceNumber': jap_service_number(service) if service else None,
+            'serviceType': order.get('serviceType', service.get('type', 'Default') if service else 'Default'),
+            'link': order['link'],
+            'quantity': order['quantity'],
+            'charge': order['charge'],
+            'status': order['status'],
+            'startCount': order.get('startCount', 0),
+            'remains': order.get('remains', 0),
+            'customData': order.get('customData', ''),
+            'duration': order.get('duration', ''),
+            'refillHistory': order.get('refillHistory', []),
+            'fulfillmentType': order.get('fulfillmentType', 'manual'),
+            'workflowJobId': str(order.get('workflowJobId')) if order.get('workflowJobId') else '',
+            'providerName': provider_name,
+            'providerOrderId': provider_order_id,
+            'providerError': provider_error,
+            'providerErrorComputed': computed,
+            'providerHttpStatus': order.get('providerHttpStatus'),
+            'providerResponse': order.get('providerResponse', ''),
+            'providerLastAttemptAt': order.get('providerLastAttemptAt'),
+            'note': order.get('note', ''),
+            'refundedAt': order.get('refundedAt'),
+            'refundAmount': order.get('refundAmount'),
+            'refundReason': order.get('refundReason', ''),
+            'cancelledAt': order.get('cancelledAt'),
+            'createdAt': order['createdAt'],
+        })
+
+    provider_names = sorted({n for n in await db.orders.distinct('providerName') if n})
+    return {
+        'orders': result,
+        'total': total,
+        'page': page,
+        'pages': (total + limit - 1) // limit,
+        'counts': counts,
+        'totalAll': total_all,
+        'totalCharge': round(total_charge, 4),
+        'providers': provider_names,
+    }
+
+
+@router.post("/admin/orders/bulk-refund")
+async def admin_bulk_refund(request: Request, data: BulkRefundBody):
+    """Cancel + refund many orders at once. Skips (and reports) orders that cannot be refunded."""
+    from backend.middleware.admin import get_current_admin, log_admin_action, require_admin_role
+    admin = await get_current_admin(request, db)
+    require_admin_role(admin, {"superadmin", "manager"})
+    if not data.orderIds:
+        raise HTTPException(status_code=400, detail="No orders selected")
+    if len(data.orderIds) > 500:
+        raise HTTPException(status_code=400, detail="Select at most 500 orders at a time")
+
+    refunded, total_amount, skipped = 0, 0.0, []
+    for oid in data.orderIds:
+        try:
+            obj_id = ObjectId(oid)
+        except Exception:
+            skipped.append({'id': oid, 'error': 'Invalid order ID'})
+            continue
+        order = await db.orders.find_one({'_id': obj_id})
+        if not order:
+            skipped.append({'id': oid, 'error': 'Order not found'})
+            continue
+        res = await _refund_order(order, data.mode, None, data.reason)
+        if res['ok']:
+            refunded += 1
+            total_amount += res['amount']
+        else:
+            skipped.append({'id': oid, 'orderNumber': order.get('japOrderId'), 'error': res['error']})
+    await log_admin_action(db, request, admin, "ORDER_BULK_CANCEL_REFUND", f"Refunded: {refunded}, Amount: {total_amount:.4f}, Skipped: {len(skipped)}")
+    return {'refunded': refunded, 'totalAmount': round(total_amount, 4), 'skipped': skipped}
+
+
+@router.post("/admin/orders/{order_id}/refund")
+async def admin_refund_order(request: Request, order_id: str, data: RefundBody):
+    """Cancel + refund one order: full, only the undelivered part, or a custom amount."""
+    from backend.middleware.admin import get_current_admin, log_admin_action, require_admin_role
+    admin = await get_current_admin(request, db)
+    require_admin_role(admin, {"superadmin", "manager"})
+    try:
+        obj_id = ObjectId(order_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid order ID")
+    order = await db.orders.find_one({'_id': obj_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    res = await _refund_order(order, data.mode, data.amount, data.reason, keep_status=data.keepStatus)
+    if not res['ok']:
+        raise HTTPException(status_code=400, detail=res['error'])
+    await log_admin_action(db, request, admin, "ORDER_CANCEL_REFUND", f"Order: {order_id}, Mode: {data.mode}, Amount: {res['amount']:.4f}")
+    return {'message': 'Order refunded', 'refundAmount': res['amount'], 'newBalance': res['newBalance'], 'partial': res['partial']}
+
+
 @router.get("/admin/orders/export")
 async def admin_export_orders(request: Request, status: str = None):
     from backend.middleware.admin import get_current_admin
