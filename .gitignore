@@ -91,3 +91,10 @@ frontend/node_modules/.cache/default-development/7.pack
 frontend/node_modules/.cache/default-development/1.pack
 frontend/node_modules/.cache/default-development/2.pack
 frontend/node_modules/.cache/default-development/5.pack
+
+# Local environment files (secrets)
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env
