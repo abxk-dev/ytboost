@@ -150,9 +150,9 @@ export default function ApiAccess() {
             <CardTitle className="text-lg font-semibold text-[#111827]">Reseller API</CardTitle>
           </div>
         </CardHeader>
-        <CardContent className="p-6">
+        <CardContent className="p-4 sm:p-6">
           <Tabs value={tab} onValueChange={setTab}>
-            <TabsList className="bg-[#f9fafb] border border-[#e5e7eb]">
+            <TabsList className="bg-[#f9fafb] border border-[#e5e7eb] w-full justify-start overflow-x-auto sm:w-auto">
               <TabsTrigger value="keys">API Keys</TabsTrigger>
               <TabsTrigger value="docs">API Documentation</TabsTrigger>
               <TabsTrigger value="stats">Usage Stats</TabsTrigger>
@@ -169,19 +169,20 @@ export default function ApiAccess() {
                     <Input
                       value={showKey ? apiKey : apiKeyMasked}
                       readOnly
-                      className="font-mono text-sm h-11 rounded-[10px] border-[#e5e7eb] bg-[#f9fafb]"
+                      className="font-mono text-sm h-11 min-w-0 flex-1 rounded-[10px] border-[#e5e7eb] bg-[#f9fafb]"
                       data-testid="api-key"
                     />
-                    <Button variant="outline" onClick={() => setShowKey((v) => !v)} className="h-11 rounded-[10px] border-[#e5e7eb]">
+                    <Button variant="outline" onClick={() => setShowKey((v) => !v)} aria-label={showKey ? 'Hide API key' : 'Show API key'} className="h-11 shrink-0 rounded-[10px] border-[#e5e7eb]">
                       {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </Button>
-                    <Button variant="outline" onClick={handleCopy} className="h-11 rounded-[10px] border-[#e5e7eb]" data-testid="copy-api-key">
+                    <Button variant="outline" onClick={handleCopy} aria-label="Copy API key" className="h-11 shrink-0 rounded-[10px] border-[#e5e7eb]" data-testid="copy-api-key">
                       {copied ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4" />}
                     </Button>
                     <Button
                       variant="outline"
                       onClick={() => setRegenOpen(true)}
-                      className="h-11 rounded-[10px] border-[#e5e7eb]"
+                      aria-label="Regenerate API key"
+                      className="h-11 shrink-0 rounded-[10px] border-[#e5e7eb]"
                       data-testid="regenerate-api-key"
                     >
                       <RefreshCw className="w-4 h-4" />
@@ -245,7 +246,7 @@ export default function ApiAccess() {
                   <div className="mt-1 font-mono text-xs text-[#6b7280] break-all">Alternate (same API): {baseUrlAlt}</div>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-2 [&>div]:min-w-0">
                   <div className="rounded-[12px] border border-[#e5e7eb] p-4">
                     <div className="text-sm font-semibold text-[#111827]">cURL</div>
                     <pre className="mt-2 bg-[#111827] text-green-400 rounded-[10px] p-4 text-xs overflow-x-auto">{`curl -X POST ${baseUrl} \\\n  -d "key=YOUR_API_KEY" \\\n  -d "action=balance"`}</pre>
