@@ -4,8 +4,21 @@
   "buildCommand": "cd frontend && CI=false npm run build",
   "outputDirectory": "frontend/build",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/app" },
-    { "source": "/v2/(.*)", "destination": "/api/app" },
-    { "source": "/((?!api/|_next/|static/|assets/).*)", "destination": "/index.html" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/app"
+    },
+    {
+      "source": "/v2/(.*)",
+      "destination": "/api/app"
+    },
+    {
+      "source": "/v2",
+      "destination": "/api/app"
+    },
+    {
+      "source": "/((?!api/|_next/|static/|assets/).*)",
+      "destination": "/index.html"
+    }
   ]
 }

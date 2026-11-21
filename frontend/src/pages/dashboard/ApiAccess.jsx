@@ -161,6 +161,10 @@ export default function ApiAccess() {
             <TabsContent value="keys" className="mt-6">
               <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
                 <div className="space-y-3">
+                  <p className="text-xs text-[#6b7280]">
+                    Use the Copy button (or click the eye icon) to get the full key. The masked text
+                    (sk-xxxx...xxxx) is not a valid API key.
+                  </p>
                   <div className="flex items-center gap-2">
                     <Input
                       value={showKey ? apiKey : apiKeyMasked}

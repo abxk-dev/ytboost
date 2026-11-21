@@ -45,6 +45,12 @@ def _mask_key(key: str) -> str:
         return "sk-" + ("*" * max(0, len(s) - 3)) + s[-3:]
     return f"sk-{s[:4]}...{s[-4:]}"
 
+def _fmt_rate(rate) -> str:
+    """Rate string without losing precision (min 2 decimals, up to 6)."""
+    r = f"{float(rate):.6f}".rstrip("0")
+    whole, _, frac = r.partition(".")
+    return f"{whole}.{frac.ljust(2, '0')}"
+
 def _ok(result):
     return result
 
@@ -290,10 +296,11 @@ async def api_v2_handler(request: Request):
                     "service": jap_service_number(svc),
                     "name": svc.get("name", ""),
                     "category": cat_name.get(svc.get("categoryId"), "Unknown"),
-                    "rate": f"{float(rate):.2f}",
+                    "rate": _fmt_rate(rate),
                     "min": str(min_qty),
                     "max": str(max_qty),
                     "type": svc.get("type", "Default"),
+                    "dripfeed": bool(svc.get("dripfeedEnabled", False)),
                     "refill": bool(svc.get("refillEnabled", False)),
                     "cancel": True,
                 })
