@@ -153,8 +153,26 @@ export default function AddOrder() {
           api.get('/services', bust),
           api.get('/services/user', bust),
         ]);
+        const merged = mergeServicePanelIds(userRes.data, pubRes.data);
         setCategories(catRes.data);
-        setServices(mergeServicePanelIds(userRes.data, pubRes.data));
+        setServices(merged);
+        // "Reorder": /dashboard/orders/add?serviceId=..&link=..&quantity=..
+        // Applied here (same batch as the data) so the dropdowns mount with the right values.
+        const sp = new URLSearchParams(window.location.search);
+        const sid = sp.get('serviceId');
+        if (sid) {
+          const svc = merged.find((s) => s.id === sid);
+          if (svc) {
+            setSelectedCategory(svc.categoryId);
+            setSelectedService(svc);
+            const l = sp.get('link');
+            if (l) setLink(l);
+            const q = parseInt(sp.get('quantity'), 10);
+            setQuantity(String(q >= svc.minQty && q <= svc.maxQty ? q : svc.minQty));
+          } else {
+            toast.error('That service is no longer available');
+          }
+        }
       } catch (err) {
         toast.error('Failed to load services');
       } finally {
@@ -259,13 +277,13 @@ export default function AddOrder() {
   return (
     <div className="max-w-[780px] mx-auto" data-testid="add-order-page">
       <Card className="bg-white border border-[#e5e7eb] rounded-[12px]">
-        <CardHeader className="border-b border-[#e5e7eb] px-7 py-5">
+        <CardHeader className="border-b border-[#e5e7eb] px-4 py-4 sm:px-7 sm:py-5">
           <div className="flex items-center gap-3">
             <CardTitle className="text-lg font-semibold text-[#111827]">New Order</CardTitle>
             <div className="h-0.5 w-16 bg-[#7c3aed] rounded-full" />
           </div>
         </CardHeader>
-        <CardContent className="p-7">
+        <CardContent className="p-4 sm:p-7">
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
               <div className="flex items-center gap-2 bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-[8px] text-sm" data-testid="order-error">

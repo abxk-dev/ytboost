@@ -346,6 +346,147 @@ async def request_refill(request: Request, order_id: str):
     
     return {'message': 'Refill requested successfully'}
 
+def _user_orders_query(user_id, status, search_clause, date_from, date_to):
+    clauses = [{'userId': user_id}]
+    if search_clause:
+        clauses.append(search_clause)
+    try:
+        if date_from:
+            clauses.append({'createdAt': {'$gte': datetime.strptime(date_from, '%Y-%m-%d')}})
+        if date_to:
+            from datetime import timedelta
+            clauses.append({'createdAt': {'$lt': datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)}})
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dates must be YYYY-MM-DD")
+    base = {'$and': clauses}
+    full = {'$and': clauses + [{'status': status}]} if status else base
+    return base, full
+
+
+async def _user_search_clause(search: Optional[str]):
+    s = (search or '').strip()
+    if not s:
+        return None
+    rx = {'$regex': re.escape(s), '$options': 'i'}
+    ors = [{'link': rx}]
+    digits = s.lstrip('#')
+    if digits.isdigit():
+        ors.append({'japOrderId': int(digits)})
+    matches = await db.services.find({'name': rx}, {'_id': 1}).to_list(500)
+    if matches:
+        ors.append({'serviceId': {'$in': [m['_id'] for m in matches]}})
+    return {'$or': ors}
+
+
+@router.get("/orders/list")
+async def get_user_orders_list(
+    request: Request,
+    page: int = 1,
+    limit: int = 20,
+    status: str = None,
+    search: str = None,
+    date_from: str = None,
+    date_to: str = None,
+    sort: str = 'newest',
+):
+    """Customer orders with search, status counts, date filter and sort."""
+    from backend.middleware.auth import get_current_user
+    user = await get_current_user(request, db)
+    user_id = ObjectId(user['_id'])
+    page = max(1, page)
+    limit = max(1, min(limit, 100))
+
+    base, query = _user_orders_query(user_id, status, await _user_search_clause(search), date_from, date_to)
+
+    counts = {}
+    async for row in db.orders.aggregate([{'$match': base}, {'$group': {'_id': '$status', 'n': {'$sum': 1}}}]):
+        counts[row['_id']] = row['n']
+    total = await db.orders.count_documents(query)
+    sum_rows = await db.orders.aggregate([{'$match': query}, {'$group': {'_id': None, 'sum': {'$sum': '$charge'}}}]).to_list(1)
+
+    sort_map = {
+        'newest': [('createdAt', -1)], 'oldest': [('createdAt', 1)],
+        'charge_desc': [('charge', -1)], 'charge_asc': [('charge', 1)],
+    }
+    orders = await db.orders.find(query).sort(sort_map.get(sort, sort_map['newest'])).skip((page - 1) * limit).limit(limit).to_list(limit)
+    svc_ids = list({o['serviceId'] for o in orders if o.get('serviceId')})
+    services = {s['_id']: s for s in await db.services.find({'_id': {'$in': svc_ids}}).to_list(len(svc_ids) or 1)}
+
+    result = []
+    for order in orders:
+        service = services.get(order.get('serviceId'))
+        qty = int(order.get('quantity') or 0)
+        remains = order.get('remains')
+        delivered = max(0, qty - int(remains)) if remains is not None and qty else 0
+        result.append({
+            'id': str(order['_id']),
+            'orderNumber': order.get('japOrderId'),
+            'serviceId': str(order['serviceId']),
+            'serviceName': service['name'] if service else 'Unknown',
+            'serviceAvailable': bool(service and service.get('status', True)),
+            'serviceType': order.get('serviceType', service.get('type', 'Default') if service else 'Default'),
+            'link': order['link'],
+            'quantity': qty,
+            'charge': order['charge'],
+            'status': order['status'],
+            'startCount': order.get('startCount', 0),
+            'remains': remains if remains is not None else qty,
+            'delivered': delivered,
+            'customData': order.get('customData', ''),
+            'duration': order.get('duration', ''),
+            'refillEnabled': service.get('refillEnabled', False) if service else False,
+            'refillHistory': order.get('refillHistory', []),
+            'fulfillmentType': order.get('fulfillmentType', 'manual'),
+            'workflowJobId': str(order.get('workflowJobId')) if order.get('workflowJobId') else '',
+            'refundedAt': order.get('refundedAt'),
+            'refundAmount': order.get('refundAmount'),
+            'refundReason': order.get('refundReason', ''),
+            'createdAt': order['createdAt'],
+        })
+
+    return {
+        'orders': result,
+        'total': total,
+        'page': page,
+        'pages': (total + limit - 1) // limit,
+        'counts': counts,
+        'totalAll': sum(counts.values()),
+        'totalCharge': round(float(sum_rows[0]['sum']), 4) if sum_rows else 0.0,
+    }
+
+
+@router.get("/orders/export")
+async def export_user_orders(request: Request, status: str = None, search: str = None, date_from: str = None, date_to: str = None):
+    """Download the customer's own orders as CSV (respects the same filters as the list)."""
+    from backend.middleware.auth import get_current_user
+    user = await get_current_user(request, db)
+    user_id = ObjectId(user['_id'])
+    _base, query = _user_orders_query(user_id, status, await _user_search_clause(search), date_from, date_to)
+    orders = await db.orders.find(query).sort('createdAt', -1).to_list(20000)
+    svc_ids = list({o['serviceId'] for o in orders if o.get('serviceId')})
+    names = {s['_id']: s.get('name', '') for s in await db.services.find({'_id': {'$in': svc_ids}}, {'name': 1}).to_list(len(svc_ids) or 1)}
+
+    def _iter_csv():
+        import csv
+        import io
+        out = io.StringIO()
+        w = csv.writer(out)
+        w.writerow(['Order', 'Date', 'Service', 'Link', 'Quantity', 'Start count', 'Remains', 'Charge', 'Status', 'Refunded'])
+        yield out.getvalue(); out.seek(0); out.truncate(0)
+        for o in orders:
+            w.writerow([
+                o.get('japOrderId') or str(o['_id']),
+                o['createdAt'].isoformat() if o.get('createdAt') else '',
+                names.get(o.get('serviceId'), ''),
+                o.get('link', ''), o.get('quantity', 0), o.get('startCount', 0), o.get('remains', ''),
+                o.get('charge', 0), o.get('status', ''), o.get('refundAmount', '') or '',
+            ])
+            yield out.getvalue(); out.seek(0); out.truncate(0)
+
+    filename = f"my_orders_{datetime.now(timezone.utc).date().isoformat()}.csv"
+    return StreamingResponse(_iter_csv(), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={filename}"})
+
+
 @router.get("/orders/{order_id}")
 async def get_order(request: Request, order_id: str):
     """Get single order details (authenticated)"""
