@@ -36,9 +36,9 @@ export default function Login() {
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="flex items-center justify-center gap-1 mb-2">
-            <span className="text-3xl font-black text-[#ff0000]">YT</span>
-            <span className="text-3xl font-black text-[#111]">BOOST</span>
-            <span className="text-3xl font-black text-[#888]">.io</span>
+            <span className="text-3xl font-black text-[#ff0000]">Yt</span>
+            <span className="text-3xl font-black text-[#111]">boost</span>
+            <span className="text-3xl font-black text-[#888]">.shop</span>
           </div>
           <p className="text-sm text-[#6b7280]">The #1 YouTube Growth Panel</p>
         </div>

@@ -46,7 +46,7 @@ export default function AdminLogin() {
           <div className="flex items-center justify-center gap-2 mb-4">
             <Shield className="w-8 h-8 text-[#7c3aed]" />
           </div>
-          <h1 className="text-2xl font-bold text-white mb-1">YTBoost Admin</h1>
+          <h1 className="text-2xl font-bold text-white mb-1">Ytboost Admin</h1>
           <p className="text-sm text-[#94a3b8]">Access the admin panel</p>
         </div>
 

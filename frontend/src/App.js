@@ -91,7 +91,7 @@ function WhatsAppFloatingButton() {
 
 function GlobalSeoHelmet() {
   const { settings } = useSettings();
-  const title = "YTboost.io - #1 YouTube Service provider";
+  const title = "Ytboost.shop - #1 YouTube Service provider";
   const description = settings.seo_meta_description || "";
   const keywords = settings.seo_meta_keywords || "";
   const gaId = settings.google_analytics_id || "";

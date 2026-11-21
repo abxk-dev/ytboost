@@ -68,17 +68,54 @@ async def resolve_service_for_add(db, user_id, service_param: Any) -> Optional[T
     return svc, sp
 
 
+ORDER_NUMBER_START = 9356732
+ORDER_GAP_WINDOW_SECONDS = 600  # 10 minutes
+
+
+def _random_order_gap(elapsed_seconds: float) -> int:
+    """Random gap between consecutive order numbers.
+
+    Orders placed at nearly the same time -> gap 10-30.
+    Orders placed ~10+ minutes apart -> gap 1000-4000.
+    In between, the range scales linearly with the elapsed time.
+    """
+    import random
+    t = max(0.0, min(1.0, elapsed_seconds / ORDER_GAP_WINDOW_SECONDS))
+    lo = int(10 + t * (1000 - 10))
+    hi = int(30 + t * (4000 - 30))
+    return random.randint(lo, max(lo, hi))
+
+
 async def get_next_jap_order_number(db) -> int:
-    r = await db.counters.find_one_and_update(
-        {"_id": "smm_jap_order_seq"},
-        {"$inc": {"n": 1}},
-        upsert=True,
-        return_document=ReturnDocument.AFTER,
-    )
-    n = (r or {}).get("n")
-    if n is None:
-        return 1
-    return int(n)
+    """Next public order number. First order is ORDER_NUMBER_START, then random gaps by time."""
+    from datetime import datetime, timezone
+    for _ in range(10):
+        now = datetime.now(timezone.utc)
+        cur = await db.counters.find_one({"_id": "order_number_seq"})
+        if not cur:
+            try:
+                await db.counters.insert_one(
+                    {"_id": "order_number_seq", "n": ORDER_NUMBER_START, "lastAt": now}
+                )
+                return ORDER_NUMBER_START
+            except Exception:
+                continue  # another request created it first
+        last_at = cur.get("lastAt") or now
+        if last_at.tzinfo is None:
+            last_at = last_at.replace(tzinfo=timezone.utc)
+        n = int(cur["n"]) + _random_order_gap((now - last_at).total_seconds())
+        res = await db.counters.update_one(
+            {"_id": "order_number_seq", "n": cur["n"]},
+            {"$set": {"n": n, "lastAt": now}},
+        )
+        if res.modified_count == 1:
+            return n
+    raise RuntimeError("could not allocate order number")
+
+
+async def get_current_order_number(db) -> int:
+    cur = await db.counters.find_one({"_id": "order_number_seq"})
+    return int(cur["n"]) if cur else ORDER_NUMBER_START
 
 
 async def resolve_user_order_by_jap_param(db, user_id, order_param: Any) -> Any:

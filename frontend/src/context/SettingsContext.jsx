@@ -5,7 +5,7 @@ const SettingsContext = createContext(null);
 
 export function SettingsProvider({ children }) {
   const [settings, setSettings] = useState({
-    site_name: 'YTBoost.io',
+    site_name: 'Ytboost.shop',
     tagline: 'The #1 YouTube Growth Panel',
     logo_url: '/uploads/logo.png',
     favicon_url: '/uploads/favicon.png'

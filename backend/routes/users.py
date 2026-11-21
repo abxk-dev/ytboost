@@ -740,7 +740,7 @@ async def user_price_list_pdf(request: Request):
     styles = getSampleStyleSheet()
     story = []
 
-    title = Paragraph("YTBoost.io — My Price List", styles["Title"])
+    title = Paragraph("Ytboost.shop — My Price List", styles["Title"])
     story.append(title)
     story.append(Spacer(1, 8))
     meta = Paragraph(f'User: {user.get("name","")} ({user.get("email","")})<br/>Date: {datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}', styles["Normal"])

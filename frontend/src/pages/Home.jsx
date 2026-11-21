@@ -7,7 +7,7 @@ import api from '../services/api';
 export default function Home() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
-  const [liveStats, setLiveStats] = useState({ totalOrders: 0, totalUsers: 0, startingPrice: 0.002 });
+  const [liveStats, setLiveStats] = useState({ totalOrders: 9356732, totalUsers: 291, totalServices: 0 });
 
   useEffect(() => {
     const handleScroll = () => {
@@ -18,17 +18,23 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const fetchStats = async () => {
+    // Real service count from the database
+    const fetchServices = async () => {
       try {
         const { data } = await api.get('/stats/public');
-        setLiveStats(data);
+        setLiveStats((prev) => ({
+          ...prev,
+          totalOrders: typeof data.totalOrders === 'number' && data.totalOrders > 0 ? data.totalOrders : prev.totalOrders,
+          totalUsers: typeof data.totalUsers === 'number' && data.totalUsers > 0 ? data.totalUsers : prev.totalUsers,
+          totalServices: typeof data.totalServices === 'number' ? data.totalServices : prev.totalServices,
+        }));
       } catch (err) {
-        // silently fail - show defaults
+        // keep previous value
       }
     };
-    fetchStats();
-    const interval = setInterval(fetchStats, 30000);
-    return () => clearInterval(interval);
+    fetchServices();
+    const t = setInterval(fetchServices, 30000);
+    return () => clearInterval(t);
   }, []);
 
   const steps = [
@@ -47,8 +53,8 @@ export default function Home() {
               <div className="logo-icon">
                 <Play className="play-icon" fill="#fff" />
               </div>
-              <span className="logo-text">YTBoost</span>
-              <span className="logo-suffix">.io</span>
+              <span className="logo-text">Ytboost</span>
+              <span className="logo-suffix">.shop</span>
             </Link>
 
             <div className="navbar-links">
@@ -114,22 +120,18 @@ export default function Home() {
             
             <div className="hero-stats">
               <div className="stat">
-                <span className="stat-number" data-testid="stat-orders">{liveStats.totalOrders > 0 ? liveStats.totalOrders.toLocaleString() : '0'}</span>
-                <span className="stat-label">Orders Completed</span>
+                <span className="stat-number" data-testid="stat-orders">{liveStats.totalOrders.toLocaleString()}</span>
+                <span className="stat-label">Total Orders</span>
               </div>
               <div className="stat-divider"></div>
               <div className="stat">
-                <span className="stat-number" data-testid="stat-users">{liveStats.totalUsers > 0 ? liveStats.totalUsers.toLocaleString() : '0'}</span>
-                <span className="stat-label">Active Users</span>
+                <span className="stat-number" data-testid="stat-users">{liveStats.totalUsers.toLocaleString()}</span>
+                <span className="stat-label">Total Users</span>
               </div>
               <div className="stat-divider"></div>
               <div className="stat">
-                <span className="stat-number">${(() => {
-                  const p = Number(liveStats.startingPrice ?? 0.002);
-                  if (!Number.isFinite(p)) return '0.002';
-                  return p < 1 ? p.toFixed(3) : p.toFixed(2);
-                })()}</span>
-                <span className="stat-label">Starting Price</span>
+                <span className="stat-number" data-testid="stat-services">{liveStats.totalServices.toLocaleString()}</span>
+                <span className="stat-label">Total Services</span>
               </div>
             </div>
           </div>
@@ -161,7 +163,7 @@ export default function Home() {
         <section className="cta-section">
           <div className="cta-container">
             <h2 className="cta-title">Start Growing Your Channel Today</h2>
-            <p className="cta-subtitle">Join 50,000+ creators who trust YTBoost.io</p>
+            <p className="cta-subtitle">Join 50,000+ creators who trust Ytboost.shop</p>
             <Link to="/register" className="cta-button" data-testid="cta-register-btn">
               Create Free Account
             </Link>
@@ -177,8 +179,8 @@ export default function Home() {
                   <div className="logo-icon light">
                     <Play className="play-icon" fill="#fff" />
                   </div>
-                  <span className="logo-text">YTBoost</span>
-                  <span className="logo-suffix">.io</span>
+                  <span className="logo-text">Ytboost</span>
+                  <span className="logo-suffix">.shop</span>
                 </div>
                 <p className="footer-tagline">The #1 YouTube Growth Panel</p>
               </div>
@@ -213,7 +215,7 @@ export default function Home() {
             </div>
             
             <div className="footer-bottom">
-              <p className="footer-copyright">© 2026 YTBoost.io. All rights reserved.</p>
+              <p className="footer-copyright">© 2026 Ytboost.shop. All rights reserved.</p>
               <p className="footer-payment">
                 <span className="crypto-icon">₿</span>
                 USDT BEP20 payments accepted

@@ -313,7 +313,7 @@ export default function AdminOrders() {
                             <ChevronDown className={`w-4 h-4 transition-transform ${expandedRow === order.id ? 'rotate-180' : ''}`} />
                           </button>
                         </td>
-                        <td className={`py-4 px-4 text-sm font-mono ${c.textSecondary}`}>#{order.id.slice(-6)}</td>
+                        <td className={`py-4 px-4 text-sm font-mono ${c.textSecondary}`}>#{order.orderNumber ?? order.id.slice(-6)}</td>
                         <td className="py-4 px-4">
                           <div>
                             <p className={`text-sm ${c.text}`}>{order.userName}</p>
@@ -404,7 +404,7 @@ export default function AdminOrders() {
                               </div>
                               {order.serviceNumber != null && (
                                 <div>
-                                  <p className={`font-medium ${c.text} mb-1`}>YTBoost / panel service id</p>
+                                  <p className={`font-medium ${c.text} mb-1`}>Ytboost / panel service id</p>
                                   <p className={`${c.textSecondary} font-mono`}>{order.serviceNumber}</p>
                                 </div>
                               )}

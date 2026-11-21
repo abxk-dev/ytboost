@@ -1,5 +1,5 @@
 """
-YTBoost.io - YouTube SMM Panel
+Ytboost.shop - YouTube SMM Panel
 Serverless-compatible FastAPI server (no Socket.io, no APScheduler)
 """
 

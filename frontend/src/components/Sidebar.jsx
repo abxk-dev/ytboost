@@ -63,9 +63,9 @@ export default function Sidebar({ isOpen, setIsOpen }) {
         {/* Logo */}
         <div className="h-[72px] flex items-center justify-between px-6 border-b border-[#e5e7eb]">
           <div className="flex items-center gap-1">
-            <span className="text-2xl font-black text-[#ff0000]">YT</span>
-            <span className="text-2xl font-black text-[#111]">BOOST</span>
-            <span className="text-2xl font-black text-[#888]">.io</span>
+            <span className="text-2xl font-black text-[#ff0000]">Yt</span>
+            <span className="text-2xl font-black text-[#111]">boost</span>
+            <span className="text-2xl font-black text-[#888]">.shop</span>
           </div>
           <button 
             onClick={() => setIsOpen(false)} 

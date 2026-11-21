@@ -23,7 +23,7 @@ class TestAdminServicesCRUD:
         
         # Admin login
         login_resp = self.session.post(f"{BASE_URL}/api/admin/auth/login", json={
-            "email": "admin@ytboost.io",
+            "email": "admin@ytboost.shop",
             "password": "Admin@123"
         })
         assert login_resp.status_code == 200, f"Admin login failed: {login_resp.text}"
@@ -364,7 +364,7 @@ class TestRefillSystem:
         
         # Admin login
         login_resp = admin_session.post(f"{BASE_URL}/api/admin/auth/login", json={
-            "email": "admin@ytboost.io",
+            "email": "admin@ytboost.shop",
             "password": "Admin@123"
         })
         assert login_resp.status_code == 200
@@ -487,7 +487,7 @@ class TestAdminOrdersExpandedView:
         self.session.headers.update({"Content-Type": "application/json"})
         
         login_resp = self.session.post(f"{BASE_URL}/api/admin/auth/login", json={
-            "email": "admin@ytboost.io",
+            "email": "admin@ytboost.shop",
             "password": "Admin@123"
         })
         assert login_resp.status_code == 200
@@ -524,7 +524,7 @@ class TestCleanup:
         session.headers.update({"Content-Type": "application/json"})
         
         login_resp = session.post(f"{BASE_URL}/api/admin/auth/login", json={
-            "email": "admin@ytboost.io",
+            "email": "admin@ytboost.shop",
             "password": "Admin@123"
         })
         assert login_resp.status_code == 200

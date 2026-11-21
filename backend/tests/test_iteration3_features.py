@@ -78,7 +78,7 @@ class TestAdminCryptoWalletUpdate:
         session = requests.Session()
         login_response = session.post(
             f"{BASE_URL}/api/admin/auth/login",
-            json={"email": "admin@ytboost.io", "password": "Admin@123"}
+            json={"email": "admin@ytboost.shop", "password": "Admin@123"}
         )
         assert login_response.status_code == 200, f"Admin login failed: {login_response.text}"
         print("✓ Admin logged in successfully")

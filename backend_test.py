@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-YTBoost.io Backend API Testing
+Ytboost.shop Backend API Testing
 Tests all backend endpoints for functionality
 """
 import requests
@@ -180,7 +180,7 @@ class YTBoostAPITester:
         )
 
 def main():
-    print("🚀 Starting YTBoost.io Backend API Tests")
+    print("🚀 Starting Ytboost.shop Backend API Tests")
     print("=" * 50)
     
     tester = YTBoostAPITester()
@@ -188,7 +188,7 @@ def main():
     # Test credentials from test_credentials.md
     user_email = "john@test.com"
     user_password = "Test@123"
-    admin_email = "admin@ytboost.io"
+    admin_email = "admin@ytboost.shop"
     admin_password = "Admin@123"
     
     # Basic health check

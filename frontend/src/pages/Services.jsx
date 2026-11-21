@@ -95,8 +95,8 @@ export default function Services() {
                 <span className="inline-flex h-8 w-10 items-center justify-center rounded-md bg-[#ff0000]">
                   <Play className="h-4 w-4" fill="#fff" />
                 </span>
-                <span className="text-xl font-extrabold tracking-tight">YTBoost</span>
-                <span className="text-xl font-extrabold tracking-tight text-white/60">.io</span>
+                <span className="text-xl font-extrabold tracking-tight">Ytboost</span>
+                <span className="text-xl font-extrabold tracking-tight text-white/60">.shop</span>
               </Link>
               <div className="flex items-center gap-2">
                 <Link to="/login" className="rounded-lg border border-white/15 px-4 py-2 text-sm font-semibold text-white/80 hover:bg-white/5">
@@ -233,7 +233,7 @@ export default function Services() {
 
         <div className="border-t border-white/10 py-8">
           <div className="mx-auto max-w-6xl px-4 text-sm text-white/50">
-            © 2026 YTBoost.io. All rights reserved.
+            © 2026 Ytboost.shop. All rights reserved.
           </div>
         </div>
       </div>

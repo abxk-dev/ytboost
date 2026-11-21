@@ -1,6 +1,6 @@
 """
 Database Seed Script
-Seeds initial data for YTBoost.io
+Seeds initial data for Ytboost.shop
 """
 from datetime import datetime, timezone
 from backend.middleware.auth import hash_password
@@ -11,11 +11,11 @@ async def seed_database(db):
     print("🌱 Starting database seed...")
     
     # Seed Admin
-    admin_exists = await db.users.find_one({'email': 'admin@ytboost.io'})
+    admin_exists = await db.users.find_one({'email': 'admin@ytboost.shop'})
     if not admin_exists:
         await db.users.insert_one({
             'name': 'Super Admin',
-            'email': 'admin@ytboost.io',
+            'email': 'admin@ytboost.shop',
             'password': hash_password('Admin@123'),
             'role': 'admin',
             'adminRole': 'superadmin',
@@ -151,14 +151,14 @@ async def seed_database(db):
     
     # Seed Site Settings
     default_settings = {
-        'site_name': 'YTBoost.io',
+        'site_name': 'Ytboost.shop',
         'tagline': 'The #1 YouTube Growth Panel',
         'logo_url': '/uploads/logo.png',
         'favicon_url': '/uploads/favicon.png',
         'maintenance_mode': 'false',
         'allow_registration': 'true',
         'welcome_bonus': '0',
-        'footer_text': '© 2026 YTBoost.io. All rights reserved.',
+        'footer_text': '© 2026 Ytboost.shop. All rights reserved.',
         'support_email': '',
         'telegram_link': '',
         'whatsapp_link': '',
@@ -167,7 +167,7 @@ async def seed_database(db):
         'announcement_enabled': 'false',
         'announcement_message': '',
         'announcement_type': 'info',
-        'seo_meta_title': 'YTBoost.io',
+        'seo_meta_title': 'Ytboost.shop',
         'seo_meta_description': '',
         'seo_meta_keywords': '',
         'google_analytics_id': '',

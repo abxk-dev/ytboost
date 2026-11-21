@@ -108,9 +108,9 @@ export default function ApiAccess() {
 
   // Same-origin in dev (proxy) or production. Panels may use /api/v2 (JAP) or /v2 — both work.
   const baseUrl =
-    typeof window !== 'undefined' ? `${window.location.origin}/api/v2` : 'https://ytboost.io/api/v2';
+    typeof window !== 'undefined' ? `${window.location.origin}/api/v2` : 'https://ytboost.shop/api/v2';
   const baseUrlAlt =
-    typeof window !== 'undefined' ? `${window.location.origin}/v2` : 'https://ytboost.io/v2';
+    typeof window !== 'undefined' ? `${window.location.origin}/v2` : 'https://ytboost.shop/v2';
 
   const callsChart = useMemo(() => {
     const arr = Array.isArray(stats?.callsPerDay) ? stats.callsPerDay : [];

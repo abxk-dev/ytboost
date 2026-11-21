@@ -41,7 +41,7 @@ module.exports = async (req, res) => {
     return res.end(
       JSON.stringify({
         error:
-          "Vercel proxy: set BACKEND_URL to your YTBoost Python server origin, e.g. https://api.ytboost.io (Uvicorn must expose /api/v2 or set BACKEND_V2_PATH).",
+          "Vercel proxy: set BACKEND_URL to your YTBoost Python server origin, e.g. https://api.ytboost.shop (Uvicorn must expose /api/v2 or set BACKEND_V2_PATH).",
       })
     );
   }

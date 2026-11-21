@@ -5,7 +5,7 @@ import re
 from typing import Any, List, Optional, Tuple
 import httpx
 
-_SMM_UA = "YTBoost/1.0 (smm-api; +https://ytboost.io)"
+_SMM_UA = "YTBoost/1.0 (smm-api; +https://ytboost.shop)"
 
 
 def smm_v2_url_candidates(url: str) -> List[str]:

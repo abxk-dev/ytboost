@@ -117,7 +117,7 @@ export default function Orders() {
                 <tbody>
                   {orders.map((order) => (
                     <tr key={order.id} className="border-b border-[#e5e7eb] last:border-0 hover:bg-[#f9fafb]">
-                      <td className="py-4 px-4 text-sm font-mono text-[#6b7280]">#{order.id.slice(-8)}</td>
+                      <td className="py-4 px-4 text-sm font-mono text-[#6b7280]">#{order.orderNumber ?? order.id.slice(-8)}</td>
                       <td className="py-4 px-4 text-sm text-[#6b7280]">{formatDate(order.createdAt)}</td>
                       <td className="py-4 px-4">
                         <a href={order.link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-sm text-[#7c3aed] hover:text-[#8b5cf6] max-w-[200px] truncate">
@@ -183,7 +183,7 @@ export default function Orders() {
           </DialogHeader>
           {refillOrder && (
             <div className="text-sm space-y-1 text-[#6b7280]">
-              <p>Order: <span className="font-mono font-medium">#{refillOrder.id.slice(-8)}</span></p>
+              <p>Order: <span className="font-mono font-medium">#{refillOrder.orderNumber ?? refillOrder.id.slice(-8)}</span></p>
               <p>Service: <span className="font-medium text-[#111827]">{refillOrder.serviceName}</span></p>
               <p>Qty: <span className="font-medium">{refillOrder.quantity.toLocaleString()}</span></p>
             </div>

@@ -22,14 +22,14 @@ def set_db(database):
 async def get_public_settings():
     """Get public site settings"""
     defaults = {
-        'site_name': 'YTBoost.io',
+        'site_name': 'Ytboost.shop',
         'tagline': 'The #1 YouTube Growth Panel',
         'logo_url': '/uploads/logo.png',
         'favicon_url': '/uploads/favicon.png',
         'maintenance_mode': 'false',
         'allow_registration': 'true',
         'welcome_bonus': '0',
-        'footer_text': '© 2026 YTBoost.io. All rights reserved.',
+        'footer_text': '© 2026 Ytboost.shop. All rights reserved.',
         'support_email': '',
         'telegram_link': '',
         'whatsapp_link': '',
@@ -38,7 +38,7 @@ async def get_public_settings():
         'announcement_enabled': 'false',
         'announcement_message': '',
         'announcement_type': 'info',
-        'seo_meta_title': 'YTBoost.io',
+        'seo_meta_title': 'Ytboost.shop',
         'seo_meta_description': '',
         'seo_meta_keywords': '',
         'google_analytics_id': '',
@@ -509,6 +509,38 @@ async def admin_get_dashboard_stats(request: Request):
     }
 
 # Public stats for landing page
+USERS_DISPLAY_START = 291
+
+
+async def _display_user_count(db) -> int:
+    """Public 'Total Users': starts at 291, then grows by 2-5 every 2-3 days."""
+    import random
+    now = datetime.now(timezone.utc)
+    cur = await db.counters.find_one({"_id": "display_users"})
+    if not cur:
+        nxt = now + timedelta(days=random.uniform(2, 3))
+        try:
+            await db.counters.insert_one({"_id": "display_users", "n": USERS_DISPLAY_START, "nextAt": nxt})
+        except Exception:
+            pass
+        return USERS_DISPLAY_START
+    n = int(cur["n"])
+    nxt = cur.get("nextAt") or now
+    if nxt.tzinfo is None:
+        nxt = nxt.replace(tzinfo=timezone.utc)
+    if now < nxt:
+        return n
+    new_n, new_nxt = n, nxt
+    while now >= new_nxt:
+        new_n += random.randint(2, 5)
+        new_nxt = new_nxt + timedelta(days=random.uniform(2, 3))
+    await db.counters.update_one(
+        {"_id": "display_users", "n": n},
+        {"$set": {"n": new_n, "nextAt": new_nxt}},
+    )
+    return new_n
+
+
 @router.get("/stats/public")
 async def get_public_stats():
     """Get public stats for the landing page (no auth required)"""
@@ -569,9 +601,15 @@ async def get_public_stats():
         total_orders = await db.orders.count_documents({})
         total_users = await db.users.count_documents({'role': {'$ne': 'admin'}})
 
+    total_users = await _display_user_count(db)
+    from backend.smm.jap_v2 import get_current_order_number
+    total_orders = await get_current_order_number(db)
+    total_services = await db.services.count_documents({'status': True})
+
     return {
         'totalOrders': total_orders,
         'totalUsers': total_users,
+        'totalServices': total_services,
         'startingPrice': starting_price
     }
 

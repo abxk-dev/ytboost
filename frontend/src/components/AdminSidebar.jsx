@@ -70,7 +70,7 @@ export default function AdminSidebar({ isOpen, setIsOpen }) {
       >
         <div className={`h-[72px] flex items-center justify-between px-6 border-b ${c.border}`}>
           <div className="flex items-center gap-2">
-            <span className={`text-xl font-bold ${c.text}`}>YTBoost</span>
+            <span className={`text-xl font-bold ${c.text}`}>Ytboost</span>
             <span className="text-xs px-2 py-0.5 bg-[#7c3aed] text-white rounded font-medium">Admin</span>
           </div>
           <button 

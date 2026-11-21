@@ -185,8 +185,11 @@ async def create_order(request: Request, data: OrderCreate):
     if provider_error:
         provider_response = provider_error[:2000]
 
+    from backend.smm.jap_v2 import get_next_jap_order_number
+    jap_id = await get_next_jap_order_number(db)
     order_doc = {
         'userId': user_id,
+        'japOrderId': jap_id,
         'serviceId': service_id,
         'serviceType': service.get('type', 'Default'),
         'link': data.link,
@@ -235,6 +238,7 @@ async def create_order(request: Request, data: OrderCreate):
     
     return {
         'id': str(result.inserted_id),
+        'orderNumber': jap_id,
         'serviceId': str(service_id),
         'serviceName': service['name'],
         'link': data.link,
@@ -275,6 +279,7 @@ async def get_user_orders(request: Request, page: int = 1, limit: int = 20, stat
         service = await db.services.find_one({'_id': order['serviceId']})
         result.append({
             'id': str(order['_id']),
+            'orderNumber': order.get('japOrderId'),
             'serviceId': str(order['serviceId']),
             'serviceName': service['name'] if service else 'Unknown',
             'serviceType': order.get('serviceType', service.get('type', 'Default') if service else 'Default'),
@@ -361,6 +366,7 @@ async def get_order(request: Request, order_id: str):
     
     return {
         'id': str(order['_id']),
+        'orderNumber': order.get('japOrderId'),
         'serviceId': str(order['serviceId']),
         'serviceName': service['name'] if service else 'Unknown',
         'link': order['link'],
@@ -429,6 +435,7 @@ async def admin_get_orders(request: Request, page: int = 1, limit: int = 50, sta
                         provider_name = provider.get('name', '')
         result.append({
             'id': str(order['_id']),
+            'orderNumber': order.get('japOrderId'),
             'userId': str(order['userId']),
             'userName': user['name'] if user else 'Unknown',
             'userEmail': user['email'] if user else 'Unknown',
