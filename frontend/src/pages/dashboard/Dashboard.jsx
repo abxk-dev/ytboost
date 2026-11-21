@@ -25,12 +25,12 @@ const dayLabel = (s) => new Date(`${s}T00:00:00`).toLocaleDateString('en-US', { 
 
 function StatCard({ icon: Icon, tint, label, value, sub, action, testid }) {
   return (
-    <Card className="bg-white border border-[#e5e7eb] rounded-[12px] hover:-translate-y-0.5 hover:shadow-sm transition-all duration-200" data-testid={testid}>
+    <Card className="bg-white border border-[#e5e7eb] rounded-[12px] transition-colors duration-150" data-testid={testid}>
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-sm text-[#6b7280] font-medium">{label}</p>
-            <p className="text-2xl font-bold text-[#111827] mt-1 truncate">{value}</p>
+            <p className="text-2xl font-semibold text-[#111827] mt-1 truncate">{value}</p>
             {sub && <p className="text-xs text-[#6b7280] mt-1">{sub}</p>}
           </div>
           <div className={`w-11 h-11 shrink-0 rounded-full flex items-center justify-center ${tint}`}><Icon className="w-5 h-5" /></div>
@@ -99,7 +99,7 @@ export default function Dashboard() {
     <div className="space-y-6" data-testid="user-dashboard">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-[#111827]">Hi{data.name ? `, ${data.name.split(' ')[0]}` : ''}</h1>
+          <h1 className="text-2xl font-semibold text-[#111827]">Hi{data.name ? `, ${data.name.split(' ')[0]}` : ''}</h1>
           <p className="text-sm text-[#6b7280]">Here is what is happening with your account</p>
         </div>
         <div className="flex flex-wrap gap-2">

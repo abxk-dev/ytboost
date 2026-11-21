@@ -137,7 +137,7 @@ export default function Transactions() {
     <div className="space-y-5" data-testid="transactions-page">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#111827]">Transaction History</h1>
+          <h1 className="text-2xl font-semibold text-[#111827]">Transaction History</h1>
           <p className="text-sm text-[#6b7280]">
             {total.toLocaleString()} {filtersActive ? 'matching' : ''} transactions
             {refreshing && <Loader2 className="inline w-3 h-3 ml-2 animate-spin" />}
@@ -151,8 +151,8 @@ export default function Transactions() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:max-w-md">
-        <div className="rounded-[12px] border border-[#e5e7eb] bg-white px-4 py-3"><p className="text-[11px] uppercase text-[#6b7280]">Money in</p><p className="text-lg font-semibold text-green-600">+{money(totalCredit, 2)}</p></div>
-        <div className="rounded-[12px] border border-[#e5e7eb] bg-white px-4 py-3"><p className="text-[11px] uppercase text-[#6b7280]">Money out</p><p className="text-lg font-semibold text-red-600">-{money(totalDebit, 2)}</p></div>
+        <div className="rounded-[12px] border border-[#e5e7eb] bg-white px-4 py-3"><p className="text-[11px] text-[#6b7280]">Money in</p><p className="text-lg font-semibold text-green-600">+{money(totalCredit, 2)}</p></div>
+        <div className="rounded-[12px] border border-[#e5e7eb] bg-white px-4 py-3"><p className="text-[11px] text-[#6b7280]">Money out</p><p className="text-lg font-semibold text-red-600">-{money(totalDebit, 2)}</p></div>
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-1">
@@ -190,7 +190,7 @@ export default function Transactions() {
                   <thead>
                     <tr className="border-b border-[#e5e7eb] bg-[#f9fafb]">
                       {['Type', 'Amount', 'Description', 'Balance after', 'Date'].map((h) => (
-                        <th key={h} className="text-left py-3 px-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">{h}</th>
+                        <th key={h} className="text-left py-3 px-4 text-xs font-semibold text-[#6b7280]">{h}</th>
                       ))}
                     </tr>
                   </thead>

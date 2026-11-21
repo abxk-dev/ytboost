@@ -39,7 +39,7 @@ export default function Account() {
 
   return (
     <div className="max-w-[600px] mx-auto space-y-6" data-testid="account-page">
-      <h1 className="text-2xl font-bold text-[#111827]">Personal Information</h1>
+      <h1 className="text-2xl font-semibold text-[#111827]">Personal Information</h1>
 
       {/* Account Info */}
       <Card className="bg-white border border-[#e5e7eb] rounded-[12px]">
@@ -51,28 +51,28 @@ export default function Account() {
             <div className="flex items-center gap-3 p-4 bg-[#f9fafb] rounded-[8px]">
               <Mail className="w-5 h-5 text-[#7c3aed]" />
               <div>
-                <p className="text-xs text-[#6b7280] uppercase tracking-wider">Email</p>
+                <p className="text-xs text-[#6b7280]">Email</p>
                 <p className="text-sm font-medium text-[#111827]">{user?.email}</p>
               </div>
             </div>
             <div className="flex items-center gap-3 p-4 bg-[#f9fafb] rounded-[8px]">
               <Wallet className="w-5 h-5 text-[#7c3aed]" />
               <div>
-                <p className="text-xs text-[#6b7280] uppercase tracking-wider">Balance</p>
+                <p className="text-xs text-[#6b7280]">Balance</p>
                 <p className="text-sm font-medium text-[#111827]">${user?.balance?.toFixed(2) || '0.00'}</p>
               </div>
             </div>
             <div className="flex items-center gap-3 p-4 bg-[#f9fafb] rounded-[8px]">
               <Calendar className="w-5 h-5 text-[#7c3aed]" />
               <div>
-                <p className="text-xs text-[#6b7280] uppercase tracking-wider">Member Since</p>
+                <p className="text-xs text-[#6b7280]">Member Since</p>
                 <p className="text-sm font-medium text-[#111827]">{formatDate(user?.createdAt)}</p>
               </div>
             </div>
             <div className="flex items-center gap-3 p-4 bg-[#f9fafb] rounded-[8px]">
               <User className="w-5 h-5 text-[#7c3aed]" />
               <div>
-                <p className="text-xs text-[#6b7280] uppercase tracking-wider">Status</p>
+                <p className="text-xs text-[#6b7280]">Status</p>
                 <p className="text-sm font-medium text-green-600 capitalize">{user?.status || 'active'}</p>
               </div>
             </div>

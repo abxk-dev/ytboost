@@ -79,14 +79,14 @@ export default function AddFunds() {
 
   return (
     <div className="max-w-[600px] mx-auto" data-testid="add-funds-page">
-      <h1 className="text-2xl font-bold text-[#111827] mb-6">Add Funds</h1>
+      <h1 className="text-2xl font-semibold text-[#111827] mb-6">Add Funds</h1>
 
       <div className="flex gap-2 p-1 bg-[#f1f5f9] rounded-[14px] mb-6">
         <button
           onClick={() => setActiveTab('crypto')}
-          className={`flex-1 py-3 px-4 rounded-[10px] text-sm font-bold transition-all ${
+          className={`flex-1 py-3 px-4 rounded-[10px] text-sm font-semibold transition-colors ${
             activeTab === 'crypto' 
-              ? 'bg-gradient-to-r from-[#c026d3] to-[#7c3aed] text-white shadow-md' 
+              ? 'bg-[#7c3aed] text-white' 
               : 'text-[#64748b] hover:text-[#111827]'
           }`}
         >
@@ -94,9 +94,9 @@ export default function AddFunds() {
         </button>
         <button
           onClick={() => setActiveTab('manual')}
-          className={`flex-1 py-3 px-4 rounded-[10px] text-sm font-bold transition-all ${
+          className={`flex-1 py-3 px-4 rounded-[10px] text-sm font-semibold transition-colors ${
             activeTab === 'manual' 
-              ? 'bg-gradient-to-r from-[#c026d3] to-[#7c3aed] text-white shadow-md' 
+              ? 'bg-[#7c3aed] text-white' 
               : 'text-[#64748b] hover:text-[#111827]'
           }`}
         >
@@ -129,7 +129,7 @@ export default function AddFunds() {
                       setSelectedMethod(method);
                       setAmount(method.minAmount.toString());
                     }}
-                    className={`p-4 rounded-[12px] border-2 transition-all text-left ${
+                    className={`p-4 rounded-[12px] border-2 transition-colors text-left ${
                       selectedMethod?.id === method.id 
                         ? 'border-[#7c3aed] bg-[#f5f3ff]' 
                         : 'border-[#e5e7eb] hover:border-[#7c3aed]/50'
@@ -199,12 +199,12 @@ export default function AddFunds() {
             <div className="space-y-6">
               <div className="p-6 bg-[#f8fafc] rounded-[16px] border border-[#e2e8f0] space-y-4">
                 <div className="text-center">
-                  <p className="text-sm font-bold text-[#64748b] uppercase tracking-wider">Manual Bank Transfer / UPI</p>
+                  <p className="text-sm font-semibold text-[#64748b]">Manual Bank Transfer / UPI</p>
                   <p className="text-xs text-[#94a3b8] mt-1">Contact support to get manual payment details</p>
                 </div>
                 
                 <div className="p-4 bg-white rounded-[12px] border border-[#e2e8f0] text-sm text-[#475569] leading-relaxed">
-                  <p className="font-bold text-[#1e293b] mb-2">Instructions:</p>
+                  <p className="font-semibold text-[#1e293b] mb-2">Instructions:</p>
                   <ol className="list-decimal list-inside space-y-2">
                     <li>Send your desired amount to our bank/UPI.</li>
                     <li>Take a clear screenshot of the successful payment.</li>
@@ -215,7 +215,7 @@ export default function AddFunds() {
 
                 <Button
                   onClick={() => navigate('/dashboard/support')}
-                  className="w-full h-12 bg-[#1e293b] hover:bg-[#0f172a] text-white font-bold rounded-[12px]"
+                  className="w-full h-12 bg-[#1e293b] hover:bg-[#0f172a] text-white font-semibold rounded-[12px]"
                 >
                   Open Support Ticket
                 </Button>

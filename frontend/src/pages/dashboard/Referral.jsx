@@ -43,7 +43,7 @@ export default function Referral() {
   return (
     <div className="space-y-6" data-testid="dashboard-referral">
       <div>
-        <h1 className="text-2xl font-bold text-[#111827]">Referral</h1>
+        <h1 className="text-2xl font-semibold text-[#111827]">Referral</h1>
         <p className="text-sm text-[#6b7280] mt-1">Share your link and earn commission when referrals deposit</p>
       </div>
 
@@ -52,7 +52,7 @@ export default function Referral() {
           <CardContent className="p-6 flex items-center justify-between">
             <div>
               <p className="text-sm text-[#6b7280]">Total Referrals</p>
-              <p className="text-2xl font-bold text-[#111827]">{data?.totalReferrals || 0}</p>
+              <p className="text-2xl font-semibold text-[#111827]">{data?.totalReferrals || 0}</p>
             </div>
             <Users className="w-6 h-6 text-[#7c3aed]" />
           </CardContent>
@@ -61,7 +61,7 @@ export default function Referral() {
           <CardContent className="p-6 flex items-center justify-between">
             <div>
               <p className="text-sm text-[#6b7280]">Total Earned</p>
-              <p className="text-2xl font-bold text-[#111827]">${Number(data?.totalEarned || 0).toFixed(2)}</p>
+              <p className="text-2xl font-semibold text-[#111827]">${Number(data?.totalEarned || 0).toFixed(2)}</p>
             </div>
             <DollarSign className="w-6 h-6 text-[#7c3aed]" />
           </CardContent>
@@ -93,7 +93,7 @@ export default function Referral() {
                 <thead>
                   <tr className="border-b border-[#e5e7eb]">
                     {['Name', 'Date'].map((h) => (
-                      <th key={h} className="text-left py-3 px-6 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">{h}</th>
+                      <th key={h} className="text-left py-3 px-6 text-xs font-semibold text-[#6b7280]">{h}</th>
                     ))}
                   </tr>
                 </thead>

@@ -31,14 +31,14 @@ export default function Sidebar({ isOpen, setIsOpen }) {
   };
 
   const navLinkClass = ({ isActive }) =>
-    `flex items-center gap-3 px-4 py-3 text-sm font-medium transition-all duration-200 border-r-[3px] ${
+    `flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors duration-150 border-r-[3px] ${
       isActive
         ? 'bg-[#f5f3ff] text-[#7c3aed] border-[#7c3aed]'
         : 'text-[#6b7280] hover:bg-[#f9fafb] border-transparent hover:text-[#111827]'
     }`;
 
   const subNavLinkClass = ({ isActive }) =>
-    `flex items-center gap-3 pl-12 pr-4 py-2.5 text-sm transition-all duration-200 ${
+    `flex items-center gap-3 pl-12 pr-4 py-2.5 text-sm transition-colors duration-150 ${
       isActive
         ? 'text-[#7c3aed] font-medium'
         : 'text-[#6b7280] hover:text-[#111827]'
@@ -63,9 +63,9 @@ export default function Sidebar({ isOpen, setIsOpen }) {
         {/* Logo */}
         <div className="h-[72px] flex items-center justify-between px-6 border-b border-[#e5e7eb]">
           <div className="flex items-center gap-1">
-            <span className="text-2xl font-black text-[#ff0000]">Yt</span>
-            <span className="text-2xl font-black text-[#111]">boost</span>
-            <span className="text-2xl font-black text-[#888]">.shop</span>
+            <span className="text-2xl font-semibold text-[#ff0000]">Yt</span>
+            <span className="text-2xl font-semibold text-[#111]">boost</span>
+            <span className="text-2xl font-semibold text-[#888]">.shop</span>
           </div>
           <button 
             onClick={() => setIsOpen(false)} 
@@ -86,7 +86,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
           <div>
             <button
               onClick={() => toggleMenu('orders')}
-              className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-[#6b7280] hover:bg-[#f9fafb] transition-all duration-200"
+              className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-[#6b7280] hover:bg-[#f9fafb] transition-colors duration-150"
               data-testid="nav-orders-toggle"
             >
               <div className="flex items-center gap-3">
@@ -142,7 +142,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
           <div>
             <button
               onClick={() => toggleMenu('account')}
-              className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-[#6b7280] hover:bg-[#f9fafb] transition-all duration-200"
+              className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-[#6b7280] hover:bg-[#f9fafb] transition-colors duration-150"
               data-testid="nav-account-toggle"
             >
               <div className="flex items-center gap-3">

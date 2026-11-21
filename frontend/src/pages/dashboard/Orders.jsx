@@ -210,20 +210,20 @@ export default function Orders() {
         ['Remaining', Number(order.remains ?? 0).toLocaleString()],
         ['Price', money(order.charge)],
       ].map(([k, v]) => (
-        <div key={k}><p className="text-[11px] uppercase text-[#6b7280]">{k}</p><p className="font-medium text-[#111827]">{v}</p></div>
+        <div key={k}><p className="text-[11px] text-[#6b7280]">{k}</p><p className="font-medium text-[#111827]">{v}</p></div>
       ))}
-      {order.duration && <div><p className="text-[11px] uppercase text-[#6b7280]">Duration</p><p className="font-medium text-[#111827]">{order.duration}</p></div>}
+      {order.duration && <div><p className="text-[11px] text-[#6b7280]">Duration</p><p className="font-medium text-[#111827]">{order.duration}</p></div>}
       {order.refundedAt && (
         <div className="col-span-2 sm:col-span-4 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-green-700">
           {money(order.refundAmount, 4)} refunded to your balance on {fmtDate(order.refundedAt)}{order.refundReason ? ` - ${order.refundReason}` : ''}
         </div>
       )}
       {order.customData && (
-        <div className="col-span-2 sm:col-span-4"><p className="text-[11px] uppercase text-[#6b7280]">Your input</p><pre className="text-xs text-[#374151] whitespace-pre-wrap break-words max-h-24 overflow-y-auto">{order.customData}</pre></div>
+        <div className="col-span-2 sm:col-span-4"><p className="text-[11px] text-[#6b7280]">Your input</p><pre className="text-xs text-[#374151] whitespace-pre-wrap break-words max-h-24 overflow-y-auto">{order.customData}</pre></div>
       )}
       {order.refillHistory?.length > 0 && (
         <div className="col-span-2 sm:col-span-4">
-          <p className="text-[11px] uppercase text-[#6b7280] mb-1">Refill requests</p>
+          <p className="text-[11px] text-[#6b7280] mb-1">Refill requests</p>
           {order.refillHistory.map((r, i) => <p key={i} className="text-xs text-[#374151]">{r.status} - {r.requestedAt ? fmtDate(r.requestedAt) : ''}</p>)}
         </div>
       )}
@@ -239,7 +239,7 @@ export default function Orders() {
     <div className="space-y-5" data-testid="orders-page">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#111827]">My Orders</h1>
+          <h1 className="text-2xl font-semibold text-[#111827]">My Orders</h1>
           <p className="text-sm text-[#6b7280]">
             {total.toLocaleString()} {filtersActive ? 'matching' : ''} orders &middot; {money(totalCharge, 2)} spent
             {refreshing && <Loader2 className="inline w-3 h-3 ml-2 animate-spin" />}
@@ -308,7 +308,7 @@ export default function Orders() {
                   <thead>
                     <tr className="border-b border-[#e5e7eb] bg-[#f9fafb]">
                       {['Order / date', 'Service', 'Link', 'Qty', 'Price', 'Status', 'Actions'].map((h) => (
-                        <th key={h} className="text-left py-3 px-3 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">{h}</th>
+                        <th key={h} className="text-left py-3 px-3 text-xs font-semibold text-[#6b7280]">{h}</th>
                       ))}
                     </tr>
                   </thead>

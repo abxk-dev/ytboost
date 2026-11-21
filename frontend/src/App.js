@@ -1,5 +1,5 @@
 import "@/App.css";
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Toaster } from "sonner";
 import { Helmet, HelmetProvider } from "react-helmet-async";
@@ -11,54 +11,54 @@ import { AdminAuthProvider } from "./context/AdminAuthContext";
 import { SettingsProvider, useSettings } from "./context/SettingsContext";
 
 // Layouts
-import DashboardLayout from "./components/DashboardLayout";
-import AdminLayout from "./components/AdminLayout";
+const DashboardLayout = lazy(() => import("./components/DashboardLayout"));
+const AdminLayout = lazy(() => import("./components/AdminLayout"));
 
 // Auth Pages
-import Login from "./pages/auth/Login";
-import Register from "./pages/auth/Register";
+const Login = lazy(() => import("./pages/auth/Login"));
+const Register = lazy(() => import("./pages/auth/Register"));
 
 // Public Pages
 import Home from "./pages/Home";
-import Services from "./pages/Services";
+const Services = lazy(() => import("./pages/Services"));
 
 // User Dashboard Pages
-import Dashboard from "./pages/dashboard/Dashboard";
-import Orders from "./pages/dashboard/Orders";
-import AddOrder from "./pages/dashboard/AddOrder";
-import Transactions from "./pages/dashboard/Transactions";
-import AddFunds from "./pages/dashboard/AddFunds";
-import PaymentSession from "./pages/dashboard/PaymentSession";
-import Account from "./pages/dashboard/Account";
-import ChangePassword from "./pages/dashboard/ChangePassword";
-import ApiAccess from "./pages/dashboard/ApiAccess";
-import Support from "./pages/dashboard/Support";
-import SupportTicket from "./pages/dashboard/SupportTicket";
-import Referral from "./pages/dashboard/Referral";
-import Analytics from "./pages/dashboard/Analytics";
+const Dashboard = lazy(() => import("./pages/dashboard/Dashboard"));
+const Orders = lazy(() => import("./pages/dashboard/Orders"));
+const AddOrder = lazy(() => import("./pages/dashboard/AddOrder"));
+const Transactions = lazy(() => import("./pages/dashboard/Transactions"));
+const AddFunds = lazy(() => import("./pages/dashboard/AddFunds"));
+const PaymentSession = lazy(() => import("./pages/dashboard/PaymentSession"));
+const Account = lazy(() => import("./pages/dashboard/Account"));
+const ChangePassword = lazy(() => import("./pages/dashboard/ChangePassword"));
+const ApiAccess = lazy(() => import("./pages/dashboard/ApiAccess"));
+const Support = lazy(() => import("./pages/dashboard/Support"));
+const SupportTicket = lazy(() => import("./pages/dashboard/SupportTicket"));
+const Referral = lazy(() => import("./pages/dashboard/Referral"));
+const Analytics = lazy(() => import("./pages/dashboard/Analytics"));
 
 // Admin Pages
-import AdminLogin from "./pages/admin/AdminLogin";
-import AdminDashboard from "./pages/admin/AdminDashboard";
-import AdminCategories from "./pages/admin/AdminCategories";
-import AdminServices from "./pages/admin/AdminServices";
-import AdminOrders from "./pages/admin/AdminOrders";
-import AdminUsers from "./pages/admin/AdminUsers";
-import AdminUserServices from "./pages/admin/AdminUserServices";
-import AdminFundRequests from "./pages/admin/AdminFundRequests";
-import AdminCryptoSettings from "./pages/admin/AdminCryptoSettings";
-import AdminSettings from "./pages/admin/AdminSettings";
-import AdminApiProviders from "./pages/admin/AdminApiProviders";
-import AdminWorkflows from "./pages/admin/AdminWorkflows";
-import AdminFinanceRevenue from "./pages/admin/AdminFinanceRevenue";
-import AdminFinanceTransactions from "./pages/admin/AdminFinanceTransactions";
-import AdminFinanceRefunds from "./pages/admin/AdminFinanceRefunds";
-import AdminSupport from "./pages/admin/AdminSupport";
-import AdminSupportTicket from "./pages/admin/AdminSupportTicket";
-import AdminAccount from "./pages/admin/AdminAccount";
-import AdminActivityLog from "./pages/admin/AdminActivityLog";
-import AdminAdmins from "./pages/admin/AdminAdmins";
-import AdminEmailBlast from "./pages/admin/AdminEmailBlast";
+const AdminLogin = lazy(() => import("./pages/admin/AdminLogin"));
+const AdminDashboard = lazy(() => import("./pages/admin/AdminDashboard"));
+const AdminCategories = lazy(() => import("./pages/admin/AdminCategories"));
+const AdminServices = lazy(() => import("./pages/admin/AdminServices"));
+const AdminOrders = lazy(() => import("./pages/admin/AdminOrders"));
+const AdminUsers = lazy(() => import("./pages/admin/AdminUsers"));
+const AdminUserServices = lazy(() => import("./pages/admin/AdminUserServices"));
+const AdminFundRequests = lazy(() => import("./pages/admin/AdminFundRequests"));
+const AdminCryptoSettings = lazy(() => import("./pages/admin/AdminCryptoSettings"));
+const AdminSettings = lazy(() => import("./pages/admin/AdminSettings"));
+const AdminApiProviders = lazy(() => import("./pages/admin/AdminApiProviders"));
+const AdminWorkflows = lazy(() => import("./pages/admin/AdminWorkflows"));
+const AdminFinanceRevenue = lazy(() => import("./pages/admin/AdminFinanceRevenue"));
+const AdminFinanceTransactions = lazy(() => import("./pages/admin/AdminFinanceTransactions"));
+const AdminFinanceRefunds = lazy(() => import("./pages/admin/AdminFinanceRefunds"));
+const AdminSupport = lazy(() => import("./pages/admin/AdminSupport"));
+const AdminSupportTicket = lazy(() => import("./pages/admin/AdminSupportTicket"));
+const AdminAccount = lazy(() => import("./pages/admin/AdminAccount"));
+const AdminActivityLog = lazy(() => import("./pages/admin/AdminActivityLog"));
+const AdminAdmins = lazy(() => import("./pages/admin/AdminAdmins"));
+const AdminEmailBlast = lazy(() => import("./pages/admin/AdminEmailBlast"));
 import { debugHealthCheck } from "./config/apiConfig";
 import { API_BASE_URL } from "./config/apiConfig";
 
@@ -144,6 +144,7 @@ function App() {
         <AdminAuthProvider>
           <BrowserRouter>
             <GlobalSeoHelmet />
+            <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-[#f0f2f5]"><div className="w-8 h-8 rounded-full border-2 border-[#7c3aed] border-t-transparent animate-spin" role="status" aria-label="Loading" /></div>}>
             <Routes>
               {/* Public Routes */}
               <Route path="/" element={<Home />} />
@@ -196,6 +197,7 @@ function App() {
               {/* Catch all */}
               <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
+            </Suspense>
             <WhatsAppFloatingButton />
           </BrowserRouter>
           <Toaster 

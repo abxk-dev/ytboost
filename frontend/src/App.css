@@ -1,9 +1,5 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-
-* {
-  font-family: 'Inter', sans-serif;
-}
-
+body, button, input, select, textarea { font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+code, pre, kbd, samp, .font-mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
@@ -33,10 +29,8 @@
 }
 
 /* Smooth transitions */
-* {
-  transition-property: background-color, border-color, color;
-  transition-duration: 150ms;
-  transition-timing-function: ease-in-out;
+body, .bg-white, button, a, input {
+  transition: background-color 150ms ease-in-out, border-color 150ms ease-in-out, color 150ms ease-in-out;
 }
 
 /* Remove transition from transform/opacity for animations */

@@ -150,7 +150,7 @@ export default function Support() {
     <div className="space-y-5" data-testid="dashboard-support">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-[#111827]">Support</h1>
+          <h1 className="text-2xl font-semibold text-[#111827]">Support</h1>
           <p className="text-sm text-[#6b7280] mt-1">
             {counts.all} ticket{counts.all === 1 ? '' : 's'} &middot; usual reply within a few hours
             {refreshing && <Loader2 className="inline w-3 h-3 ml-2 animate-spin" />}
@@ -208,7 +208,7 @@ export default function Support() {
                   <colgroup><col style={{ width: 90 }} /><col /><col style={{ width: 150 }} /><col style={{ width: 120 }} /><col style={{ width: 200 }} /><col style={{ width: 60 }} /></colgroup>
                   <thead>
                     <tr className="border-b border-[#e5e7eb] bg-[#f9fafb]">
-                      {['Ticket', 'Subject', 'Category', 'Status', 'Last activity', ''].map((h) => <th key={h} className="text-left py-3 px-4 text-xs font-semibold text-[#6b7280] uppercase tracking-wider">{h}</th>)}
+                      {['Ticket', 'Subject', 'Category', 'Status', 'Last activity', ''].map((h) => <th key={h} className="text-left py-3 px-4 text-xs font-semibold text-[#6b7280]">{h}</th>)}
                     </tr>
                   </thead>
                   <tbody>

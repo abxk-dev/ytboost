@@ -49,7 +49,7 @@ export default function ChangePassword() {
 
   return (
     <div className="max-w-[500px] mx-auto" data-testid="change-password-page">
-      <h1 className="text-2xl font-bold text-[#111827] mb-6">Change Password</h1>
+      <h1 className="text-2xl font-semibold text-[#111827] mb-6">Change Password</h1>
 
       <Card className="bg-white border border-[#e5e7eb] rounded-[12px]">
         <CardHeader className="border-b border-[#e5e7eb] px-6 py-4">
@@ -97,7 +97,7 @@ export default function ChangePassword() {
                 className="h-11 rounded-[8px] border-[#e5e7eb]"
                 data-testid="new-password"
               />
-              <p className="text-xs text-[#6b7280]">Min 8 characters, 1 uppercase, 1 number</p>
+              <p className="text-xs text-[#6b7280]">Min 8 characters, 1, 1 number</p>
             </div>
 
             <div className="space-y-2">

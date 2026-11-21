@@ -112,7 +112,7 @@ export default function Analytics() {
   return (
     <div className="max-w-[1100px] mx-auto space-y-6" data-testid="dashboard-analytics">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-[#111827]">Analytics</h1>
+        <h1 className="text-2xl font-semibold text-[#111827]">Analytics</h1>
         <div className="flex items-center gap-2">
           {['daily', 'weekly', 'monthly'].map((p) => (
             <Button
@@ -160,10 +160,10 @@ export default function Analytics() {
           </>
         ) : (
           <>
-            <Card className="bg-white border border-[#e5e7eb] rounded-[12px]"><CardContent className="p-5"><div className="text-xs font-semibold uppercase text-[#6b7280]">Total Spent</div><div className="mt-2 text-2xl font-extrabold text-[#111827]">{fmtMoney(overview?.totalSpent)}</div></CardContent></Card>
-            <Card className="bg-white border border-[#e5e7eb] rounded-[12px]"><CardContent className="p-5"><div className="text-xs font-semibold uppercase text-[#6b7280]">Spent This Month</div><div className="mt-2 text-2xl font-extrabold text-[#111827]">{fmtMoney(overview?.spentThisMonth)}</div></CardContent></Card>
-            <Card className="bg-white border border-[#e5e7eb] rounded-[12px]"><CardContent className="p-5"><div className="text-xs font-semibold uppercase text-[#6b7280]">Avg Daily Spend</div><div className="mt-2 text-2xl font-extrabold text-[#111827]">{fmtMoney(overview?.avgDailySpend)}</div></CardContent></Card>
-            <Card className="bg-white border border-[#e5e7eb] rounded-[12px]"><CardContent className="p-5"><div className="text-xs font-semibold uppercase text-[#6b7280]">Total Orders</div><div className="mt-2 text-2xl font-extrabold text-[#111827]">{Number(overview?.totalOrders || 0).toLocaleString()}</div></CardContent></Card>
+            <Card className="bg-white border border-[#e5e7eb] rounded-[12px]"><CardContent className="p-5"><div className="text-xs font-semibold text-[#6b7280]">Total Spent</div><div className="mt-2 text-2xl font-semibold text-[#111827]">{fmtMoney(overview?.totalSpent)}</div></CardContent></Card>
+            <Card className="bg-white border border-[#e5e7eb] rounded-[12px]"><CardContent className="p-5"><div className="text-xs font-semibold text-[#6b7280]">Spent This Month</div><div className="mt-2 text-2xl font-semibold text-[#111827]">{fmtMoney(overview?.spentThisMonth)}</div></CardContent></Card>
+            <Card className="bg-white border border-[#e5e7eb] rounded-[12px]"><CardContent className="p-5"><div className="text-xs font-semibold text-[#6b7280]">Avg Daily Spend</div><div className="mt-2 text-2xl font-semibold text-[#111827]">{fmtMoney(overview?.avgDailySpend)}</div></CardContent></Card>
+            <Card className="bg-white border border-[#e5e7eb] rounded-[12px]"><CardContent className="p-5"><div className="text-xs font-semibold text-[#6b7280]">Total Orders</div><div className="mt-2 text-2xl font-semibold text-[#111827]">{Number(overview?.totalOrders || 0).toLocaleString()}</div></CardContent></Card>
           </>
         )}
       </div>
@@ -216,12 +216,12 @@ export default function Analytics() {
                     <div className="flex items-center justify-between">
                       <div className="text-sm font-semibold text-[#111827]">{c.categoryName}</div>
                       <span className="relative flex h-2.5 w-2.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                        <span className="absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-40"></span>
                         <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-green-500"></span>
                       </span>
                     </div>
                     <div className="mt-2 text-sm text-[#6b7280]">Currently delivering</div>
-                    <div className="mt-1 text-xl font-extrabold text-[#111827] tabular-nums transition-all duration-700">
+                    <div className="mt-1 text-xl font-semibold text-[#111827] tabular-nums">
                       {Number(val).toLocaleString()} {unit}
                     </div>
                   </div>

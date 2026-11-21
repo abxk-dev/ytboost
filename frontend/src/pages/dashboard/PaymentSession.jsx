@@ -43,7 +43,7 @@ export default function PaymentSession() {
         });
         toast.success(`$${data.receivedAmount || data.expectedAmount} credited to your balance!`);
       } else if (prevStatus !== 'detected' && (data.status === 'detecting' || data.status === 'detected')) {
-        toast.success('Payment detected on blockchain!');
+        toast.success('Payment detected');
       }
       
       // Calculate time left
@@ -104,7 +104,7 @@ export default function PaymentSession() {
     if (session?.depositAddress) {
       await navigator.clipboard.writeText(session.depositAddress);
       setCopied(true);
-      toast.success('Address copied!');
+      toast.success('Address copied');
       setTimeout(() => setCopied(false), 2000);
     }
   };
@@ -163,12 +163,12 @@ export default function PaymentSession() {
         return (
           <div className="space-y-6">
             <div className="p-6 bg-[#0f172a] rounded-[16px] border border-[#334155] shadow-xl">
-              <p className="text-[10px] font-bold text-[#64748b] text-center tracking-widest uppercase mb-4">
+              <p className="text-[10px] font-semibold text-[#64748b] text-center mb-4">
                 Our BEP20 Receiving Address
               </p>
               
               <div className="relative group">
-                <div className="flex items-center gap-2 p-4 bg-[#020617] rounded-[12px] border border-[#334155] transition-all group-hover:border-[#7c3aed]/50">
+                <div className="flex items-center gap-2 p-4 bg-[#020617] rounded-[12px] border border-[#334155] transition-colors group-hover:border-[#7c3aed]/50">
                   <code className="flex-1 text-sm font-mono text-[#e879f9] break-all text-center">
                     {session.depositAddress}
                   </code>
@@ -199,13 +199,13 @@ export default function PaymentSession() {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Token</label>
+                <label className="text-[10px] font-semibold text-[#64748b]">Token</label>
                 <div className="p-3 bg-[#0f172a] border border-[#334155] rounded-[10px] text-sm text-[#f1f5f9] font-medium">
                   {session.coinName} ({session.network})
                 </div>
               </div>
               <div className="space-y-1.5">
-                <label className="text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Amount (USD)</label>
+                <label className="text-[10px] font-semibold text-[#64748b]">Amount (USD)</label>
                 <div className="p-3 bg-[#0f172a] border border-[#334155] rounded-[10px] text-sm text-[#f1f5f9] font-medium">
                   Min ${session.expectedAmount}
                 </div>
@@ -213,7 +213,7 @@ export default function PaymentSession() {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-[#64748b] uppercase tracking-wider">Transaction Hash (TXID)</label>
+              <label className="text-[10px] font-semibold text-[#64748b]">Transaction Hash (TXID)</label>
               <input
                 type="text"
                 placeholder="0x..."
@@ -227,7 +227,7 @@ export default function PaymentSession() {
             <Button
               onClick={handleVerifyHash}
               disabled={verifying || !txHash.trim()}
-              className="w-full h-14 bg-gradient-to-r from-[#c026d3] to-[#7c3aed] hover:from-[#d946ef] hover:to-[#8b5cf6] text-white font-bold rounded-[12px] shadow-lg shadow-[#7c3aed]/20 transition-all active:scale-[0.98]"
+              className="w-full h-14 bg-[#7c3aed] hover:bg-[#6d28d9] text-white font-semibold rounded-[12px] transition-colors active:scale-[0.98]"
             >
               {verifying ? (
                 <Loader2 className="w-6 h-6 animate-spin" />
@@ -247,7 +247,7 @@ export default function PaymentSession() {
       case 'detecting':
       case 'detected':
         return (
-          <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-[12px] border border-blue-200 animate-pulse">
+          <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-[12px] border border-blue-200">
             <Search className="w-6 h-6 text-blue-600" />
             <div>
               <p className="font-medium text-blue-700">Payment detected on chain!</p>
@@ -312,12 +312,12 @@ export default function PaymentSession() {
   return (
     <div className="max-w-[500px] mx-auto py-8 px-4" data-testid="payment-session-page">
       <div className="mb-8 text-center">
-        <h1 className="text-2xl font-black text-[#111827] tracking-tight mb-2 uppercase italic">
+        <h1 className="text-2xl font-semibold text-[#111827] tracking-tight mb-2">
           Pay with {session.coinName} ({session.network})
         </h1>
         <div className="inline-flex items-center gap-2 px-4 py-1.5 bg-[#f5f3ff] rounded-full border border-[#7c3aed]/10">
-          <span className="text-sm font-bold text-[#7c3aed]">Send exactly:</span>
-          <span className="text-lg font-black text-[#7c3aed]">{session.expectedAmount} {session.coinName}</span>
+          <span className="text-sm font-semibold text-[#7c3aed]">Send exactly:</span>
+          <span className="text-lg font-semibold text-[#7c3aed]">{session.expectedAmount} {session.coinName}</span>
         </div>
       </div>
 

@@ -120,7 +120,7 @@ export default function ApiAccess() {
   return (
     <div className="max-w-[980px] mx-auto space-y-6" data-testid="api-access-page">
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold text-[#111827]">API Access</h1>
+        <h1 className="text-2xl font-semibold text-[#111827]">API Access</h1>
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
@@ -334,10 +334,10 @@ export default function ApiAccess() {
                   ].map((c) => (
                     <div key={c.title} className="rounded-[12px] border border-[#e5e7eb] bg-[#fafafa] p-4">
                       <div className="flex items-center justify-between">
-                        <div className="text-xs font-semibold text-[#6b7280] uppercase">{c.title}</div>
+                        <div className="text-xs font-semibold text-[#6b7280]">{c.title}</div>
                         <c.icon className="w-4 h-4 text-[#7c3aed]" />
                       </div>
-                      <div className="mt-2 text-2xl font-extrabold text-[#111827]">
+                      <div className="mt-2 text-2xl font-semibold text-[#111827]">
                         {statsLoading ? <Skeleton className="h-7 w-24" /> : (typeof c.value === 'string' ? c.value : Number(c.value || 0).toLocaleString())}
                       </div>
                     </div>
