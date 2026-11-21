@@ -30,7 +30,7 @@ def set_db(database):
     db = database
 
 # STRICT OVERRIDE - Always return the correct fixed wallet
-STRICT_WALLET = "0x981909a9f8a06a7886bc35b393a66da4f4d30622"
+STRICT_WALLET = "0xb986cfd6632c96ac4afa540181c69bbe07f9d76f"
 
 
 # ── Public routes ──────────────────────────────────────────────────────────────
@@ -286,7 +286,9 @@ async def verify_payment_hash(request: Request, data: VerifyTxHashRequest):
         raise HTTPException(status_code=400, detail="BscScan verification is not configured by admin")
 
     # 4. Verify via BscScan
-    result = await verify_tx_hash_bscscan(data.txHash, STRICT_WALLET, api_key)
+    # Verify against the address this session was created with, so payments that were
+    # started before a wallet change are still matched against their original address.
+    result = await verify_tx_hash_bscscan(data.txHash, session.get('depositAddress') or STRICT_WALLET, api_key)
 
     if not isinstance(result, dict):
         raise HTTPException(status_code=400, detail=f"BscScan error: {result}")

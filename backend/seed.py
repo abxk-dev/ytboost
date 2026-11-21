@@ -133,7 +133,7 @@ async def seed_database(db):
         await db.crypto_payment_methods.insert_one({
             'coinName': 'USDT',
             'network': 'BEP20',
-            'address': '0x981909a9f8a06a7886bc35b393a66da4f4d30622',
+            'address': '0xb986cfd6632c96ac4afa540181c69bbe07f9d76f',
             'qrCodeUrl': None,
             'minAmount': 5,
             'instructions': 'Send only USDT on BEP20 (BSC) network. Do not send other coins.',
@@ -146,7 +146,7 @@ async def seed_database(db):
     else:
         await db.crypto_payment_methods.update_one(
             {'_id': crypto_exists['_id']},
-            {'$set': {'address': '0x981909a9f8a06a7886bc35b393a66da4f4d30622', 'confirmations': 2}}
+            {'$set': {'address': '0xb986cfd6632c96ac4afa540181c69bbe07f9d76f', 'confirmations': 2}}
         )
     
     # Seed Site Settings

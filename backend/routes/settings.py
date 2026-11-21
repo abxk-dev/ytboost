@@ -7,6 +7,7 @@ from bson import ObjectId
 import os
 import base64
 from backend.middleware.admin import get_request_ip
+from backend.routes.crypto import STRICT_WALLET  # single source of truth for the BEP20 wallet
 
 router = APIRouter(tags=["Settings"])
 
@@ -58,20 +59,20 @@ async def get_public_settings():
         'public_fake_stats_start': '',
         'public_starting_price': '0.002',
         'bscscan_api_key': 'H7XZARZKDI393CFJBEKFBI9NYH8UJCC1NK',
-        'panel_bep20_wallet': '0x981909a9f8a06a7886bc35b393a66da4f4d30622'
+        'panel_bep20_wallet': STRICT_WALLET
     }
     
     # Force update DB if wrong
     await db.site_settings.update_one(
         {'key': 'panel_bep20_wallet'},
-        {'$set': {'value': '0x981909a9f8a06a7886bc35b393a66da4f4d30622'}},
+        {'$set': {'value': STRICT_WALLET}},
         upsert=True
     )
 
     # Force update crypto payment methods to use the fixed wallet
     await db.crypto_payment_methods.update_many(
         {'network': 'BEP20'},
-        {'$set': {'address': '0x981909a9f8a06a7886bc35b393a66da4f4d30622'}}
+        {'$set': {'address': STRICT_WALLET}}
     )
 
     result = {}
