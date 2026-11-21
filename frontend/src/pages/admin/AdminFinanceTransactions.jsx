@@ -8,6 +8,7 @@ import { Label } from '../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Loader2, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { toast } from 'sonner';
+import TruncateTip from '../../components/ui/TruncateTip';
 
 export default function AdminFinanceTransactions() {
   const { theme } = useAdminTheme();
@@ -154,7 +155,9 @@ export default function AdminFinanceTransactions() {
                       </td>
                       <td className={`py-4 px-4 text-sm ${c.textSecondary}`}>{tx.type}</td>
                       <td className={`py-4 px-4 text-sm ${c.text}`}>${Number(tx.amount || 0).toFixed(2)}</td>
-                      <td className={`py-4 px-4 text-sm ${c.textSecondary} max-w-[320px] truncate`}>{tx.description}</td>
+                      <td className={`py-4 px-4 text-sm ${c.textSecondary}`}>
+                        <TruncateTip text={tx.description}><span className="block truncate max-w-[320px]">{tx.description}</span></TruncateTip>
+                      </td>
                       <td className={`py-4 px-4 text-sm ${c.textSecondary}`}>${Number(tx.balanceAfter || 0).toFixed(2)}</td>
                       <td className={`py-4 px-4 text-sm ${c.textSecondary}`}>{new Date(tx.createdAt).toLocaleString()}</td>
                     </tr>

@@ -657,38 +657,51 @@ export default function AdminServices() {
                   <div className={`px-6 py-5 text-sm border-t ${c.border} ${c.textMuted}`}>No services in this category yet.</div>
                 ) : (
                   <div className={`overflow-x-auto border-t ${c.border}`}>
-                    <table className="w-full min-w-[1010px]">
+                    <table className="w-full min-w-[1100px] table-fixed">
+                      <colgroup>
+                        <col style={{ width: 40 }} />
+                        <col style={{ width: 64 }} />
+                        <col />
+                        <col style={{ width: 80 }} />
+                        <col style={{ width: 96 }} />
+                        <col style={{ width: 84 }} />
+                        <col style={{ width: 66 }} />
+                        <col style={{ width: 100 }} />
+                        <col style={{ width: 64 }} />
+                        <col style={{ width: 206 }} />
+                        <col style={{ width: 84 }} />
+                      </colgroup>
                       <thead>
                         <tr className={`border-b ${c.border}`}>
                           <th className="w-[44px]" />
-                          {['ID', 'Service name', 'Provider', 'Provider svc ID', 'Price /1k', 'Min', 'Max', 'Status', 'Mapping', 'Actions'].map((h) => (
-                            <th key={h} className={`text-left py-2.5 px-3 text-xs font-semibold ${c.textMuted} uppercase whitespace-nowrap`}>{h}</th>
+                          {['ID', 'Service name', 'Provider', 'Provider ID', 'Price /1k', 'Min', 'Max', 'Status', 'Mapping', 'Actions'].map((h) => (
+                            <th key={h} className={`text-left py-2.5 px-2 text-xs font-semibold ${c.textMuted} uppercase whitespace-nowrap`}>{h}</th>
                           ))}
                         </tr>
                       </thead>
                       <tbody>
                         {items.map((svc) => (
                           <tr key={svc.id} className={`border-b ${c.border} last:border-0 ${c.cardHover} ${svc.status ? '' : 'opacity-60'}`}>
-                            <td className="py-3 px-3">
+                            <td className="py-3 px-2">
                               <Checkbox checked={selectedIds.has(svc.id)} onCheckedChange={(v) => toggleSelectOne(svc.id, v)} aria-label={`Select ${svc.name}`} />
                             </td>
-                            <td className="py-3 px-3">
+                            <td className="py-3 px-2">
                               <span className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs font-mono font-bold" title="Service ID (same as reseller API)">
                                 {svc.serviceNumber != null && svc.serviceNumber !== '' ? svc.serviceNumber : (svc.sid ?? '-')}
                               </span>
                             </td>
-                            <td className={`py-3 px-3 text-sm font-medium ${c.text} max-w-[380px]`}>
+                            <td className={`py-3 px-2 text-sm font-medium ${c.text}`}>
                               <InlineEdit
                                 value={svc.name}
                                 tip
-                                className="block truncate max-w-[370px]"
+                                className="block truncate max-w-full"
                                 onSave={(v) => saveService(svc, { name: v }, { name: v })}
                                 validate={(v) => (v ? null : 'Name cannot be empty')}
                               />
                             </td>
-                            <td className={`py-3 px-3 text-sm ${c.textSecondary} whitespace-nowrap`}>{svc.providerName || <span className={c.textMuted}>-</span>}</td>
-                            <td className={`py-3 px-3 text-sm font-mono ${c.textSecondary}`}>{svc.providerServiceId || <span className={c.textMuted}>-</span>}</td>
-                            <td className={`py-3 px-3 text-sm ${c.text} whitespace-nowrap`}>
+                            <td className={`py-3 px-2 text-sm ${c.textSecondary} truncate`} title={svc.providerName || undefined}>{svc.providerName || <span className={c.textMuted}>-</span>}</td>
+                            <td className={`py-3 px-2 text-sm font-mono ${c.textSecondary} truncate`} title={svc.providerServiceId || undefined}>{svc.providerServiceId || <span className={c.textMuted}>-</span>}</td>
+                            <td className={`py-3 px-2 text-sm ${c.text} whitespace-nowrap`}>
                               <InlineEdit
                                 value={svc.rate}
                                 display={fmtRate(svc.rate)}
@@ -698,7 +711,7 @@ export default function AdminServices() {
                                 validate={(v) => (Number(v) > 0 ? null : 'Price must be greater than 0')}
                               />
                             </td>
-                            <td className={`py-3 px-3 text-sm ${c.textSecondary}`}>
+                            <td className={`py-3 px-2 text-sm ${c.textSecondary}`}>
                               <InlineEdit
                                 value={svc.minQty}
                                 display={Number(svc.minQty).toLocaleString()}
@@ -708,7 +721,7 @@ export default function AdminServices() {
                                 validate={(v) => (!Number.isInteger(Number(v)) || Number(v) <= 0 ? 'Min must be a whole number above 0' : Number(v) > svc.maxQty ? 'Min cannot exceed max' : null)}
                               />
                             </td>
-                            <td className={`py-3 px-3 text-sm ${c.textSecondary}`}>
+                            <td className={`py-3 px-2 text-sm ${c.textSecondary}`}>
                               <InlineEdit
                                 value={svc.maxQty}
                                 display={Number(svc.maxQty).toLocaleString()}
@@ -718,8 +731,8 @@ export default function AdminServices() {
                                 validate={(v) => (!Number.isInteger(Number(v)) || Number(v) <= 0 ? 'Max must be a whole number above 0' : Number(v) < svc.minQty ? 'Max cannot be below min' : null)}
                               />
                             </td>
-                            <td className="py-3 px-3"><Switch checked={!!svc.status} onCheckedChange={(v) => setServiceStatus(svc, v)} /></td>
-                            <td className="py-3 px-3">
+                            <td className="py-3 px-2"><Switch checked={!!svc.status} onCheckedChange={(v) => setServiceStatus(svc, v)} /></td>
+                            <td className="py-3 px-2">
                               <div className="flex items-center gap-2">
                                 <Badge className={`${badgeClass(svc.mappingState)} border text-xs whitespace-nowrap`}>
                                   {(MAPPING_BADGE[svc.mappingState] || MAPPING_BADGE.unmapped).label}
@@ -732,7 +745,7 @@ export default function AdminServices() {
                                 </Button>
                               </div>
                             </td>
-                            <td className="py-3 px-3">
+                            <td className="py-3 px-2">
                               <div className="flex items-center gap-1">
                                 <Button variant="ghost" size="sm" title="Edit all details" onClick={() => openDialog(svc)} className={`h-8 w-8 p-0 ${c.textSecondary}`}><Pencil className="w-4 h-4" /></Button>
                                 <Button variant="ghost" size="sm" title="Delete" onClick={() => handleDelete(svc)} className="h-8 w-8 p-0 text-red-400 hover:text-red-300"><Trash2 className="w-4 h-4" /></Button>

@@ -7,6 +7,7 @@ import { Users, ShoppingCart, DollarSign, Wallet, Clock, Activity, TrendingUp, A
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, PieChart, Pie, Cell, BarChart, Bar, CartesianGrid } from 'recharts';
 import { toast } from 'sonner';
+import TruncateTip from '../../components/ui/TruncateTip';
 
 export default function AdminDashboard() {
   const { theme } = useAdminTheme();
@@ -238,7 +239,9 @@ export default function AdminDashboard() {
                   {stats?.recentOrders?.slice(0, 5).map((order) => (
                     <tr key={order.id} className={`border-b ${c.border} last:border-0`}>
                       <td className={`py-3 px-4 text-sm ${c.text}`}>{order.userName}</td>
-                      <td className={`py-3 px-4 text-sm ${c.textSecondary} truncate max-w-[150px]`}>{order.serviceName}</td>
+                      <td className={`py-3 px-4 text-sm ${c.textSecondary}`}>
+                        <TruncateTip text={order.serviceName}><span className="block truncate max-w-[150px]">{order.serviceName}</span></TruncateTip>
+                      </td>
                       <td className="py-3 px-4"><Badge className={`${statusColors[order.status]} border text-xs`}>{order.status}</Badge></td>
                     </tr>
                   ))}

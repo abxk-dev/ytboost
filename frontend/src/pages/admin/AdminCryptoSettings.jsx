@@ -11,6 +11,7 @@ import { Switch } from '../../components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog';
 import { Loader2, Plus, Pencil, Trash2, Bitcoin } from 'lucide-react';
 import { toast } from 'sonner';
+import TruncateTip from '../../components/ui/TruncateTip';
 
 export default function AdminCryptoSettings() {
   const { theme } = useAdminTheme();
@@ -163,7 +164,9 @@ export default function AdminCryptoSettings() {
                           {method.network}
                         </Badge>
                       </td>
-                      <td className="py-4 px-4 text-sm text-[#94a3b8] font-mono max-w-[200px] truncate">{method.address}</td>
+                      <td className="py-4 px-4 text-sm text-[#94a3b8] font-mono">
+                        <TruncateTip text={method.address}><span className="block truncate max-w-[200px]">{method.address}</span></TruncateTip>
+                      </td>
                       <td className="py-4 px-4 text-sm text-[#f1f5f9]">${method.minAmount}</td>
                       <td className="py-4 px-4">
                         <Badge className={method.autoDetect 

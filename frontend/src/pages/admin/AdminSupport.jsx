@@ -8,6 +8,7 @@ import { Badge } from '../../components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Loader2, LifeBuoy } from 'lucide-react';
 import { toast } from 'sonner';
+import TruncateTip from '../../components/ui/TruncateTip';
 
 export default function AdminSupport() {
   const { theme } = useAdminTheme();
@@ -108,7 +109,9 @@ export default function AdminSupport() {
                           {t.adminUnread && <span className="w-2 h-2 rounded-full bg-red-500" />}
                         </div>
                       </td>
-                      <td className={`py-4 px-4 text-sm ${c.text} max-w-[260px] truncate`}>{t.subject}</td>
+                      <td className={`py-4 px-4 text-sm ${c.text}`}>
+                        <TruncateTip text={t.subject}><span className="block truncate max-w-[260px]">{t.subject}</span></TruncateTip>
+                      </td>
                       <td className={`py-4 px-4 text-sm ${c.textSecondary}`}>{t.category}</td>
                       <td className="py-4 px-4"><Badge className={`${statusBadge(t.status)} border text-xs`}>{labelStatus(t.status)}</Badge></td>
                       <td className={`py-4 px-4 text-sm ${c.textSecondary}`}>{t.lastReplyAt ? new Date(t.lastReplyAt).toLocaleString() : '-'}</td>

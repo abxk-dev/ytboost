@@ -11,6 +11,7 @@ import { Input } from '../../components/ui/input';
 import { Checkbox } from '../../components/ui/checkbox';
 import { Loader2, ShoppingCart, ChevronLeft, ChevronRight, ExternalLink, ChevronDown, RefreshCw, StickyNote, Ban, Download } from 'lucide-react';
 import { toast } from 'sonner';
+import TruncateTip from '../../components/ui/TruncateTip';
 import WorkflowStatusDialog from '../../components/WorkflowStatusDialog';
 
 export default function AdminOrders() {
@@ -320,9 +321,9 @@ export default function AdminOrders() {
                             <p className={`text-xs ${c.textMuted}`}>{order.userEmail}</p>
                           </div>
                         </td>
-                        <td className={`py-4 px-4 text-sm ${c.textSecondary} max-w-[200px] truncate`} title={order.serviceNumber != null ? `Service id: ${order.serviceNumber}` : undefined}>
+                        <td className={`py-4 px-4 text-sm ${c.textSecondary} max-w-[260px]`}>
                           <div className="flex items-center gap-2 min-w-0">
-                            <span className="truncate">{order.serviceName}</span>
+                            <TruncateTip text={order.serviceName}><span className="truncate min-w-0">{order.serviceName}</span></TruncateTip>
                             {(order.fulfillmentType === 'workflow' || order.workflowJobId) && (
                               <button type="button" onClick={() => openWorkflowStatus(order.id)} title="Workflow status">
                                 <Badge className="bg-[#7c3aed]/20 text-[#c4b5fd] border-[#7c3aed]/30 border text-[10px] px-2 py-0.5">
@@ -337,7 +338,7 @@ export default function AdminOrders() {
                         </td>
                         <td className="py-4 px-4">
                           <a href={order.link} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-sm text-[#7c3aed] hover:text-[#8b5cf6]">
-                            <span className="truncate max-w-[100px]">{order.link.slice(0, 20)}...</span>
+                            <TruncateTip text={order.link}><span className="block truncate max-w-[140px]">{order.link}</span></TruncateTip>
                             <ExternalLink className="w-3 h-3" />
                           </a>
                         </td>

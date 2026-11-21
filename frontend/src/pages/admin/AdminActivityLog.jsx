@@ -7,6 +7,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Loader2, Download, ChevronLeft, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
+import TruncateTip from '../../components/ui/TruncateTip';
 
 export default function AdminActivityLog() {
   const { theme } = useAdminTheme();
@@ -128,7 +129,9 @@ export default function AdminActivityLog() {
                       <td className={`py-4 px-4 text-sm ${c.textSecondary}`}>{l.createdAt ? new Date(l.createdAt).toLocaleString() : ''}</td>
                       <td className={`py-4 px-4 text-sm ${c.text}`}>{l.adminName}</td>
                       <td className={`py-4 px-4 text-sm font-mono ${c.textSecondary}`}>{l.action}</td>
-                      <td className={`py-4 px-4 text-sm ${c.textSecondary} max-w-[420px] truncate`}>{l.details}</td>
+                      <td className={`py-4 px-4 text-sm ${c.textSecondary}`}>
+                        <TruncateTip text={l.details}><span className="block truncate max-w-[420px]">{l.details}</span></TruncateTip>
+                      </td>
                       <td className={`py-4 px-4 text-sm ${c.textSecondary}`}>{l.ipAddress}</td>
                     </tr>
                   ))}

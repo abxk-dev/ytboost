@@ -13,6 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/ta
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { Loader2, Plus, Trash2, Pencil, Play, Pause, RefreshCw } from 'lucide-react';
 import { toast } from 'sonner';
+import TruncateTip from '../../components/ui/TruncateTip';
 
 function newCondition() {
   return {
@@ -871,8 +872,8 @@ export default function AdminWorkflows() {
                         <tr key={wf.id} className={`border-b ${c.border} last:border-0`}>
                           <td className={`py-4 px-4 text-sm ${c.text} font-medium`}>{wf.name}</td>
                           <td className={`py-4 px-4 text-sm ${c.textSecondary}`}>{wf.serviceName}</td>
-                          <td className={`py-4 px-4 text-sm ${c.textSecondary} max-w-[320px] truncate`} title={wf.conditionsSummary}>
-                            {wf.conditionsSummary}
+                          <td className={`py-4 px-4 text-sm ${c.textSecondary}`}>
+                            <TruncateTip text={wf.conditionsSummary}><span className="block truncate max-w-[320px]">{wf.conditionsSummary}</span></TruncateTip>
                           </td>
                           <td className="py-4 px-4">
                             <Button

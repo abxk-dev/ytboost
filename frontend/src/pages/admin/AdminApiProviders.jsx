@@ -10,6 +10,7 @@ import { Switch } from '../../components/ui/switch';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../../components/ui/dialog';
 import { Loader2, Plus, Pencil, Trash2, Plug, RefreshCw, Eye, EyeOff, CheckCircle, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import TruncateTip from '../../components/ui/TruncateTip';
 
 const INITIAL = { name: '', apiUrl: '', apiKey: '', markup: '20', status: true };
 
@@ -200,7 +201,9 @@ export default function AdminApiProviders() {
                           <span className={`text-xs ${c.textMuted}`}>Last checked: {formatDate(p.lastTestedAt)}</span>
                         </div>
                       </td>
-                      <td className={`py-4 px-4 text-sm ${c.textSecondary} max-w-[200px] truncate`}>{p.apiUrl}</td>
+                      <td className={`py-4 px-4 text-sm ${c.textSecondary}`}>
+                        <TruncateTip text={p.apiUrl}><span className="block truncate max-w-[200px]">{p.apiUrl}</span></TruncateTip>
+                      </td>
                       <td className={`py-4 px-4 text-sm ${c.text}`}>{p.markup}%</td>
                       <td className="py-4 px-4">
                         <div className="flex items-center gap-2">
