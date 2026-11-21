@@ -253,11 +253,6 @@ export default function AdminServices() {
     }
   };
 
-  const moveCategory = (svc, categoryId) => {
-    if (categoryId === svc.categoryId) return;
-    saveService(svc, { categoryId }, { categoryId, categoryName: catNameById[categoryId] || svc.categoryName });
-  };
-
   const setServiceStatus = (svc, status) => saveService(svc, { status }, { status });
 
   const handleDelete = async (svc) => {
@@ -660,11 +655,11 @@ export default function AdminServices() {
                   <div className={`px-6 py-5 text-sm border-t ${c.border} ${c.textMuted}`}>No services in this category yet.</div>
                 ) : (
                   <div className={`overflow-x-auto border-t ${c.border}`}>
-                    <table className="w-full min-w-[1180px]">
+                    <table className="w-full min-w-[1010px]">
                       <thead>
                         <tr className={`border-b ${c.border}`}>
                           <th className="w-[44px]" />
-                          {['ID', 'Service name', 'Category', 'Provider', 'Provider svc ID', 'Price /1k', 'Min', 'Max', 'Status', 'Mapping', 'Actions'].map((h) => (
+                          {['ID', 'Service name', 'Provider', 'Provider svc ID', 'Price /1k', 'Min', 'Max', 'Status', 'Mapping', 'Actions'].map((h) => (
                             <th key={h} className={`text-left py-2.5 px-3 text-xs font-semibold ${c.textMuted} uppercase whitespace-nowrap`}>{h}</th>
                           ))}
                         </tr>
@@ -680,21 +675,13 @@ export default function AdminServices() {
                                 {svc.serviceNumber != null && svc.serviceNumber !== '' ? svc.serviceNumber : (svc.sid ?? '-')}
                               </span>
                             </td>
-                            <td className={`py-3 px-3 text-sm font-medium ${c.text} max-w-[300px]`}>
+                            <td className={`py-3 px-3 text-sm font-medium ${c.text} max-w-[380px]`}>
                               <InlineEdit
                                 value={svc.name}
-                                className="block truncate max-w-[290px]"
+                                className="block truncate max-w-[370px]"
                                 onSave={(v) => saveService(svc, { name: v }, { name: v })}
                                 validate={(v) => (v ? null : 'Name cannot be empty')}
                               />
-                            </td>
-                            <td className="py-3 px-3">
-                              <Select value={svc.categoryId} onValueChange={(v) => moveCategory(svc, v)}>
-                                <SelectTrigger className={`h-8 w-[170px] text-xs ${c.input}`} title="Move to another category"><SelectValue /></SelectTrigger>
-                                <SelectContent className={c.selectContent}>
-                                  {categories.map((x) => <SelectItem key={x.id} value={x.id}>{x.name}</SelectItem>)}
-                                </SelectContent>
-                              </Select>
                             </td>
                             <td className={`py-3 px-3 text-sm ${c.textSecondary} whitespace-nowrap`}>{svc.providerName || <span className={c.textMuted}>-</span>}</td>
                             <td className={`py-3 px-3 text-sm font-mono ${c.textSecondary}`}>{svc.providerServiceId || <span className={c.textMuted}>-</span>}</td>
