@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api, { formatApiError } from '../../services/api';
 import { useAdminTheme, t } from '../../context/AdminThemeContext';
@@ -7,678 +7,730 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Badge } from '../../components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '../../components/ui/dialog';
+import { Checkbox } from '../../components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Loader2, Search, Users, Pencil, Ban, CheckCircle, Star, ChevronLeft, ChevronRight, Eye, Bell, BarChart3 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '../../components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '../../components/ui/sheet';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from '../../components/ui/dropdown-menu';
+import {
+  Loader2, Users, Search, ChevronLeft, ChevronRight, Bell, Ban, CheckCircle, Star, Eye, BarChart3, Activity,
+  RefreshCw, X, MoreHorizontal, DollarSign, Copy, ShoppingCart, Wallet,
+} from 'lucide-react';
 import { toast } from 'sonner';
+import TruncateTip from '../../components/ui/TruncateTip';
+
+const money = (n, d = 2) => `$${Number(n || 0).toFixed(d)}`;
+const fmtDay = (s) => (s ? new Date(s).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '-');
+const fmtDateTime = (s) => (s ? new Date(s).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-');
+const QUICK_AMOUNTS = [5, 10, 25, 50, 100];
+const ORDER_STATUS_STYLE = {
+  Pending: 'text-amber-500', Processing: 'text-blue-500', 'In Progress': 'text-sky-500', Completed: 'text-green-500',
+  Partial: 'text-yellow-500', Cancelled: 'text-red-500', Failed: 'text-rose-500',
+};
 
 export default function AdminUsers() {
   const { theme } = useAdminTheme();
   const c = t(theme);
+
   const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
+  const [counts, setCounts] = useState({ active: 0, banned: 0 });
+  const [totalAll, setTotalAll] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [totalBalance, setTotalBalance] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
-  const [totalUsers, setTotalUsers] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [balanceFilter, setBalanceFilter] = useState('all');
-  const [fromDate, setFromDate] = useState('');
-  const [toDate, setToDate] = useState('');
-  
-  // Balance modal
-  const [balanceDialogOpen, setBalanceDialogOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState(null);
-  const [balanceAmount, setBalanceAmount] = useState('');
-  const [balanceType, setBalanceType] = useState('add');
-  const [balanceNote, setBalanceNote] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [ordersFilter, setOrdersFilter] = useState('all');
+  const [sort, setSort] = useState('newest');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const searchRef = useRef(null);
+  const fetchSeq = useRef(0);
 
-  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [bulkWorking, setBulkWorking] = useState('');
+  const [copiedKey, setCopiedKey] = useState('');
+
+  // balance dialog (single)
+  const [balanceUser, setBalanceUser] = useState(null);
+  const [balanceType, setBalanceType] = useState('add');
+  const [balanceAmount, setBalanceAmount] = useState('');
+  const [balanceNote, setBalanceNote] = useState('');
+  const [balanceSaving, setBalanceSaving] = useState(false);
+
+  // bulk balance dialog
+  const [bulkBalanceOpen, setBulkBalanceOpen] = useState(false);
   const [bulkEmails, setBulkEmails] = useState('');
-  const [bulkSelectAll, setBulkSelectAll] = useState(false);
+  const [bulkAll, setBulkAll] = useState(false);
   const [bulkAmount, setBulkAmount] = useState('');
   const [bulkNote, setBulkNote] = useState('');
+  const [bulkBalanceSaving, setBulkBalanceSaving] = useState(false);
 
-  const [activityOpen, setActivityOpen] = useState(false);
-  const [activityUser, setActivityUser] = useState(null);
-  const [activityFilter, setActivityFilter] = useState('all');
-  const [activityLoading, setActivityLoading] = useState(false);
-  const [activityItems, setActivityItems] = useState([]);
-
-  const [notifyOpen, setNotifyOpen] = useState(false);
-  const [notifyUser, setNotifyUser] = useState(null);
+  // notify dialog (single or many)
+  const [notifyTargets, setNotifyTargets] = useState(null); // array of user objects
   const [notifyTitle, setNotifyTitle] = useState('');
   const [notifyMessage, setNotifyMessage] = useState('');
   const [notifyType, setNotifyType] = useState('info');
   const [notifySending, setNotifySending] = useState(false);
 
-  const [reportOpen, setReportOpen] = useState(false);
+  // drawer
+  const [drawerUser, setDrawerUser] = useState(null);
+  const [overview, setOverview] = useState(null);
+  const [overviewLoading, setOverviewLoading] = useState(false);
+
+  // activity / report
+  const [activityUser, setActivityUser] = useState(null);
+  const [activityFilter, setActivityFilter] = useState('all');
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityItems, setActivityItems] = useState([]);
   const [reportUser, setReportUser] = useState(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportData, setReportData] = useState(null);
 
-  const fetchUsers = useCallback(async ({ page: p, search: s, status, balance, from, to } = {}) => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ page: String(p || 1), limit: 50 });
-      if (s) params.append('search', s);
-      if (status) params.append('status', status);
-      if (balance && balance !== 'all') params.append('balance', balance);
-      if (from) params.append('from_', `${from}T00:00:00`);
-      if (to) params.append('to', `${to}T23:59:59`);
-      
-      const { data } = await api.get(`/admin/users?${params}`);
-      setUsers(data.users);
-      setTotalPages(data.pages);
-      setTotalUsers(data.total || 0);
-    } catch (error) {
-      console.error('Failed to fetch users:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
-    fetchUsers({ page, search: debouncedSearch, status: statusFilter, balance: balanceFilter, from: fromDate, to: toDate });
-  }, [balanceFilter, debouncedSearch, fetchUsers, fromDate, page, statusFilter, toDate]);
-
-  useEffect(() => {
-    const id = setTimeout(() => {
-      setPage(1);
-      setDebouncedSearch(search);
-    }, 300);
+    const id = setTimeout(() => { setSearch(searchInput.trim()); setPage(1); }, 300);
     return () => clearTimeout(id);
-  }, [search]);
+  }, [searchInput]);
 
-  const handleSearch = (e) => {
-    e.preventDefault();
-    setPage(1);
-    setDebouncedSearch(search);
-  };
-
-  const resetFilters = () => {
-    setSearch('');
-    setDebouncedSearch('');
-    setStatusFilter('');
-    setBalanceFilter('all');
-    setFromDate('');
-    setToDate('');
-    setPage(1);
-  };
-
-  const openBalanceDialog = (user) => {
-    setSelectedUser(user);
-    setBalanceAmount('');
-    setBalanceType('add');
-    setBalanceNote('');
-    setBalanceDialogOpen(true);
-  };
-
-  const openBulkDialog = () => {
-    setBulkEmails('');
-    setBulkSelectAll(false);
-    setBulkAmount('');
-    setBulkNote('');
-    setBulkDialogOpen(true);
-  };
-
-  const parseEmails = () => {
-    return bulkEmails
-      .split('\n')
-      .map((e) => e.trim())
-      .filter(Boolean);
-  };
-
-  const bulkCount = bulkSelectAll ? totalUsers : parseEmails().length;
-  const bulkAmt = Number(bulkAmount || 0);
-  const bulkTotal = bulkCount * (bulkAmt > 0 ? bulkAmt : 0);
-
-  const submitBulkBalance = async () => {
-    if (!bulkAmount || Number(bulkAmount) <= 0) {
-      toast.error('Please enter a valid amount');
-      return;
-    }
-    const emails = bulkSelectAll ? [] : parseEmails();
-    if (!bulkSelectAll && emails.length === 0) {
-      toast.error('Please paste at least one email, or select all users');
-      return;
-    }
-    setSubmitting(true);
+  const fetchUsers = useCallback(async ({ silent = false } = {}) => {
+    const seq = ++fetchSeq.current;
+    if (silent) setRefreshing(true); else setLoading(true);
     try {
-      const { data } = await api.post('/admin/users/bulk-balance', { emails, amount: Number(bulkAmount), note: bulkNote });
-      toast.success(`Balance added to ${data.updated} users successfully`);
-      setBulkDialogOpen(false);
-      fetchUsers();
+      const p = new URLSearchParams({ page, limit: pageSize, sort });
+      if (search) p.append('search', search);
+      if (statusFilter) p.append('status', statusFilter);
+      if (balanceFilter !== 'all') p.append('balance', balanceFilter);
+      if (ordersFilter !== 'all') p.append('orders', ordersFilter);
+      if (dateFrom) p.append('date_from', dateFrom);
+      if (dateTo) p.append('date_to', dateTo);
+      const { data } = await api.get(`/admin/users/list?${p}`);
+      if (seq !== fetchSeq.current) return;
+      setUsers(data.users);
+      setCounts(data.counts || { active: 0, banned: 0 });
+      setTotalAll(data.totalAll || 0);
+      setTotal(data.total || 0);
+      setTotalBalance(data.totalBalance || 0);
+      setTotalPages(data.pages || 1);
     } catch (error) {
-      toast.error(formatApiError(error));
+      if (seq === fetchSeq.current && !silent) toast.error(formatApiError(error));
     } finally {
-      setSubmitting(false);
+      if (seq === fetchSeq.current) { setLoading(false); setRefreshing(false); }
     }
+  }, [page, pageSize, sort, search, statusFilter, balanceFilter, ordersFilter, dateFrom, dateTo]);
+
+  useEffect(() => { fetchUsers(); }, [fetchUsers]);
+  useEffect(() => { setSelectedIds(new Set()); }, [page, pageSize, sort, search, statusFilter, balanceFilter, ordersFilter, dateFrom, dateTo]);
+
+  const anyDialog = !!(balanceUser || bulkBalanceOpen || notifyTargets || drawerUser || activityUser || reportUser);
+  useEffect(() => {
+    const onKey = (e) => {
+      const tag = (e.target?.tagName || '').toLowerCase();
+      const typing = tag === 'input' || tag === 'textarea' || e.target?.isContentEditable;
+      if (e.key === '/' && !typing) { e.preventDefault(); searchRef.current?.focus(); }
+      else if (e.key === 'r' && !typing && !e.metaKey && !e.ctrlKey && !anyDialog) fetchUsers({ silent: true });
+      else if (e.key === 'Escape' && !typing && !anyDialog) setSelectedIds(new Set());
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [fetchUsers, anyDialog]);
+
+  const filtersActive = !!(search || statusFilter || balanceFilter !== 'all' || ordersFilter !== 'all' || dateFrom || dateTo);
+  const clearFilters = () => {
+    setSearchInput(''); setSearch(''); setStatusFilter(''); setBalanceFilter('all'); setOrdersFilter('all');
+    setDateFrom(''); setDateTo(''); setPage(1);
   };
 
-  const openActivity = async (user) => {
-    setActivityUser(user);
-    setActivityFilter('all');
-    setActivityOpen(true);
-    setActivityLoading(true);
+  // selection
+  const visibleIds = useMemo(() => users.map((u) => u.id), [users]);
+  const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedIds.has(id));
+  const someSelected = visibleIds.some((id) => selectedIds.has(id)) && !allSelected;
+  const selectedUsers = useMemo(() => users.filter((u) => selectedIds.has(u.id)), [users, selectedIds]);
+  const selectedBalance = selectedUsers.reduce((s, u) => s + Number(u.balance || 0), 0);
+  const toggleAll = (val) => setSelectedIds(val === true ? new Set(visibleIds) : new Set());
+  const toggleOne = (id, val) => setSelectedIds((prev) => {
+    const next = new Set(prev);
+    if (val === true) next.add(id); else next.delete(id);
+    return next;
+  });
+
+  const copy = async (text, key) => {
+    try { await navigator.clipboard.writeText(String(text)); setCopiedKey(key); setTimeout(() => setCopiedKey(''), 1200); }
+    catch { toast.error('Copy failed'); }
+  };
+
+  // ---------- status ----------
+  const setUserStatus = async (user, want) => {
+    if (user.status === want) return;
+    const prev = users;
+    setUsers((list) => list.map((u) => (u.id === user.id ? { ...u, status: want } : u)));
     try {
-      const { data } = await api.get(`/admin/users/${user.id}/activity`);
-      setActivityItems(data || []);
+      await api.put(`/admin/users/${user.id}/status`);
+      toast.success(`${user.name} ${want === 'banned' ? 'banned' : 'unbanned'}`, {
+        action: { label: 'Undo', onClick: () => setUserStatus({ ...user, status: want }, user.status) },
+      });
+      fetchUsers({ silent: true });
     } catch (error) {
+      setUsers(prev);
       toast.error(formatApiError(error));
-      setActivityItems([]);
-    } finally {
-      setActivityLoading(false);
     }
   };
 
-  const applyActivityFilter = async (val) => {
-    if (!activityUser) return;
-    setActivityFilter(val);
-    setActivityLoading(true);
+  const bulkStatus = async (status) => {
+    const ids = Array.from(selectedIds);
+    if (!ids.length) return;
+    setBulkWorking(status);
     try {
-      const url = val === 'all' ? `/admin/users/${activityUser.id}/activity` : `/admin/users/${activityUser.id}/activity?action=${encodeURIComponent(val)}`;
-      const { data } = await api.get(url);
-      setActivityItems(data || []);
-    } catch (error) {
-      toast.error(formatApiError(error));
-      setActivityItems([]);
-    } finally {
-      setActivityLoading(false);
-    }
+      const { data } = await api.post('/admin/users/bulk-status', { ids, status });
+      toast.success(`${data.updated} user${data.updated === 1 ? '' : 's'} ${status === 'banned' ? 'banned' : 'unbanned'}`);
+      setSelectedIds(new Set());
+      await fetchUsers({ silent: true });
+    } catch (error) { toast.error(formatApiError(error)); }
+    finally { setBulkWorking(''); }
   };
 
-  const openNotify = (user) => {
-    setNotifyUser(user);
-    setNotifyTitle('');
-    setNotifyMessage('');
-    setNotifyType('info');
-    setNotifyOpen(true);
+  // ---------- balance ----------
+  const openBalance = (user, type = 'add', amount = '') => {
+    setBalanceUser(user); setBalanceType(type); setBalanceAmount(String(amount)); setBalanceNote('');
+  };
+  const submitBalance = async (e) => {
+    e?.preventDefault();
+    const amt = parseFloat(balanceAmount);
+    if (!(amt > 0)) { toast.error('Enter an amount above 0'); return; }
+    if (balanceType === 'deduct' && amt > Number(balanceUser.balance)) { toast.error('Cannot deduct more than the current balance'); return; }
+    setBalanceSaving(true);
+    try {
+      const { data } = await api.put(`/admin/users/${balanceUser.id}/balance`, { amount: amt, type: balanceType, note: balanceNote });
+      toast.success(`${balanceUser.name}: balance is now ${money(data.newBalance)}`);
+      const id = balanceUser.id;
+      setUsers((list) => list.map((u) => (u.id === id ? { ...u, balance: data.newBalance } : u)));
+      if (drawerUser?.id === id) loadOverview(id);
+      setBalanceUser(null);
+      fetchUsers({ silent: true });
+    } catch (error) { toast.error(formatApiError(error)); }
+    finally { setBalanceSaving(false); }
   };
 
-  const sendNotification = async () => {
-    if (!notifyUser) return;
-    if (!notifyTitle.trim() || !notifyMessage.trim()) {
-      toast.error('Title and message are required');
-      return;
-    }
+  const openBulkBalance = (fromSelection) => {
+    setBulkAll(false);
+    setBulkEmails(fromSelection ? selectedUsers.map((u) => u.email).join('\n') : '');
+    setBulkAmount(''); setBulkNote('');
+    setBulkBalanceOpen(true);
+  };
+  const bulkEmailList = bulkEmails.split('\n').map((e) => e.trim()).filter(Boolean);
+  const bulkCount = bulkAll ? totalAll : bulkEmailList.length;
+  const submitBulkBalance = async (e) => {
+    e?.preventDefault();
+    const amt = Number(bulkAmount);
+    if (!(amt > 0)) { toast.error('Enter an amount above 0'); return; }
+    if (!bulkAll && bulkEmailList.length === 0) { toast.error('Paste at least one email, or choose all users'); return; }
+    setBulkBalanceSaving(true);
+    try {
+      const { data } = await api.post('/admin/users/bulk-balance', { emails: bulkAll ? [] : bulkEmailList, amount: amt, note: bulkNote });
+      toast.success(`${money(amt)} added to ${data.updated} users`);
+      setBulkBalanceOpen(false); setSelectedIds(new Set());
+      fetchUsers({ silent: true });
+    } catch (error) { toast.error(formatApiError(error)); }
+    finally { setBulkBalanceSaving(false); }
+  };
+
+  // ---------- notify ----------
+  const openNotify = (targets) => { setNotifyTargets(targets); setNotifyTitle(''); setNotifyMessage(''); setNotifyType('info'); };
+  const sendNotify = async (e) => {
+    e?.preventDefault();
+    if (!notifyTitle.trim() || !notifyMessage.trim()) { toast.error('Title and message are required'); return; }
     setNotifySending(true);
     try {
-      await api.post(`/admin/users/${notifyUser.id}/notify`, { title: notifyTitle.trim(), message: notifyMessage.trim(), type: notifyType });
-      toast.success('Notification sent');
-      setNotifyOpen(false);
-    } catch (error) {
-      toast.error(formatApiError(error));
-    } finally {
-      setNotifySending(false);
-    }
+      if (notifyTargets.length === 1) {
+        await api.post(`/admin/users/${notifyTargets[0].id}/notify`, { title: notifyTitle.trim(), message: notifyMessage.trim(), type: notifyType });
+        toast.success(`Notification sent to ${notifyTargets[0].name}`);
+      } else {
+        const { data } = await api.post('/admin/users/bulk-notify', { ids: notifyTargets.map((u) => u.id), title: notifyTitle.trim(), message: notifyMessage.trim(), type: notifyType });
+        toast.success(`Notification sent to ${data.sent} users`);
+        setSelectedIds(new Set());
+      }
+      setNotifyTargets(null);
+    } catch (error) { toast.error(formatApiError(error)); }
+    finally { setNotifySending(false); }
   };
 
+  // ---------- drawer ----------
+  const loadOverview = async (id) => {
+    setOverviewLoading(true);
+    try {
+      const { data } = await api.get(`/admin/users/${id}/overview`);
+      setOverview(data);
+    } catch (error) { toast.error(formatApiError(error)); setOverview(null); }
+    finally { setOverviewLoading(false); }
+  };
+  const openDrawer = (user) => { setDrawerUser(user); setOverview(null); loadOverview(user.id); };
+
+  // ---------- activity / report ----------
+  const loadActivity = async (user, filter) => {
+    setActivityLoading(true);
+    try {
+      const url = filter === 'all' ? `/admin/users/${user.id}/activity` : `/admin/users/${user.id}/activity?action=${encodeURIComponent(filter)}`;
+      const { data } = await api.get(url);
+      setActivityItems(data || []);
+    } catch (error) { toast.error(formatApiError(error)); setActivityItems([]); }
+    finally { setActivityLoading(false); }
+  };
+  const openActivity = (user) => { setActivityUser(user); setActivityFilter('all'); loadActivity(user, 'all'); };
   const openReport = async (user) => {
-    setReportUser(user);
-    setReportOpen(true);
-    setReportLoading(true);
-    setReportData(null);
-    try {
-      const { data } = await api.get(`/admin/users/${user.id}/report`);
-      setReportData(data);
-    } catch (error) {
-      toast.error(formatApiError(error));
-    } finally {
-      setReportLoading(false);
-    }
+    setReportUser(user); setReportData(null); setReportLoading(true);
+    try { const { data } = await api.get(`/admin/users/${user.id}/report`); setReportData(data); }
+    catch (error) { toast.error(formatApiError(error)); }
+    finally { setReportLoading(false); }
   };
 
-  const handleBalanceUpdate = async () => {
-    if (!balanceAmount || parseFloat(balanceAmount) <= 0) {
-      toast.error('Please enter a valid amount');
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      await api.put(`/admin/users/${selectedUser.id}/balance`, {
-        amount: parseFloat(balanceAmount),
-        type: balanceType,
-        note: balanceNote
-      });
-      toast.success('Balance updated');
-      setBalanceDialogOpen(false);
-      fetchUsers();
-    } catch (error) {
-      toast.error(formatApiError(error));
-    } finally {
-      setSubmitting(false);
-    }
+  const statusChip = (label, value, n) => {
+    const active = statusFilter === value;
+    return (
+      <button
+        key={label} type="button" onClick={() => { setStatusFilter(value); setPage(1); }}
+        data-testid={`user-chip-${label}`}
+        className={`shrink-0 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition ${active ? 'border-[#7c3aed] bg-[#7c3aed]/15 text-[#7c3aed]' : `${c.border} ${c.textSecondary} hover:border-[#7c3aed]/50`}`}
+      >
+        {label}
+        <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${active ? 'bg-[#7c3aed] text-white' : theme === 'dark' ? 'bg-[#334155]' : 'bg-[#e2e8f0]'}`}>{n}</span>
+      </button>
+    );
   };
 
-  const toggleUserStatus = async (userId) => {
-    try {
-      const { data } = await api.put(`/admin/users/${userId}/status`);
-      toast.success(`User ${data.status === 'banned' ? 'banned' : 'unbanned'}`);
-      fetchUsers();
-    } catch (error) {
-      toast.error(formatApiError(error));
-    }
-  };
-
-  const formatDate = (dateStr) => {
-    return new Date(dateStr).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
+  const balanceAfter = balanceUser
+    ? Number(balanceUser.balance || 0) + (balanceType === 'add' ? 1 : -1) * (parseFloat(balanceAmount) || 0)
+    : 0;
 
   return (
-    <div className="space-y-6" data-testid="admin-users">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <h1 className="text-2xl font-bold text-[#f1f5f9]">Users</h1>
-        <Button variant="outline" onClick={openBulkDialog} className="border-[#7c3aed] text-[#7c3aed] hover:bg-[#7c3aed]/10 rounded-[8px]">
-          Bulk Add Balance
-        </Button>
+    <div className="space-y-5" data-testid="admin-users">
+      {/* Header */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div>
+          <h1 className={`text-2xl font-bold ${c.text}`}>Users</h1>
+          <p className={`text-sm ${c.textMuted}`}>
+            {total.toLocaleString()} {filtersActive ? 'matching' : ''} users &middot; {money(totalBalance)} total balance
+            {refreshing && <Loader2 className="inline w-3 h-3 ml-2 animate-spin" />}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={() => fetchUsers({ silent: true })} className={`${c.border} ${c.textSecondary}`} title="Refresh (r)" aria-label="Refresh"><RefreshCw className="w-4 h-4" /></Button>
+          <Button variant="outline" onClick={() => openBulkBalance(false)} className="border-[#7c3aed] text-[#7c3aed] hover:bg-[#7c3aed]/10">
+            <Wallet className="w-4 h-4 mr-2" />Bulk add balance
+          </Button>
+        </div>
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {statusChip('All', '', totalAll)}
+        {statusChip('Active', 'active', counts.active || 0)}
+        {statusChip('Banned', 'banned', counts.banned || 0)}
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col sm:flex-row gap-4">
-        <form onSubmit={handleSearch} className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#64748b]" />
-          <Input
-            placeholder="Search by name or email..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 bg-[#1e293b] border-[#334155] text-[#f1f5f9]"
-          />
-        </form>
-        <Select value={statusFilter} onValueChange={(val) => { setStatusFilter(val === 'all' ? '' : val); setPage(1); }}>
-          <SelectTrigger className="w-full sm:w-[180px] bg-[#1e293b] border-[#334155] text-[#f1f5f9]">
-            <SelectValue placeholder="All Status" />
-          </SelectTrigger>
-          <SelectContent className="bg-[#1e293b] border-[#334155]">
-            <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="active">Active</SelectItem>
-            <SelectItem value="banned">Banned</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={balanceFilter} onValueChange={(val) => { setBalanceFilter(val); setPage(1); }}>
-          <SelectTrigger className="w-full sm:w-[200px] bg-[#1e293b] border-[#334155] text-[#f1f5f9]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent className="bg-[#1e293b] border-[#334155]">
-            <SelectItem value="all">All Balances</SelectItem>
-            <SelectItem value="zero">Zero Balance</SelectItem>
+      <div className="flex flex-col xl:flex-row gap-3">
+        <div className="relative flex-1 min-w-0">
+          <Search className={`absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 ${c.textMuted}`} />
+          <Input ref={searchRef} value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Search name, email, referral code or user id...  (press / to focus)" className={`pl-10 ${c.input}`} data-testid="users-search" />
+        </div>
+        <Select value={balanceFilter} onValueChange={(v) => { setBalanceFilter(v); setPage(1); }}>
+          <SelectTrigger className={`w-full xl:w-[160px] ${c.input}`}><SelectValue /></SelectTrigger>
+          <SelectContent className={c.selectContent}>
+            <SelectItem value="all">All balances</SelectItem>
+            <SelectItem value="zero">Zero balance</SelectItem>
             <SelectItem value="under10">Under $10</SelectItem>
-            <SelectItem value="over10">Over $10</SelectItem>
+            <SelectItem value="over10">$10 and over</SelectItem>
           </SelectContent>
         </Select>
-        </div>
-        <div className="flex flex-col sm:flex-row sm:items-end gap-4">
-          <div className="space-y-2">
-            <Label className="text-[#94a3b8]">From</Label>
-            <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className="bg-[#1e293b] border-[#334155] text-[#f1f5f9]" />
-          </div>
-          <div className="space-y-2">
-            <Label className="text-[#94a3b8]">To</Label>
-            <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className="bg-[#1e293b] border-[#334155] text-[#f1f5f9]" />
-          </div>
-          <button onClick={resetFilters} className="text-sm underline text-[#94a3b8] hover:text-[#f1f5f9]">Reset Filters</button>
-        </div>
+        <Select value={ordersFilter} onValueChange={(v) => { setOrdersFilter(v); setPage(1); }}>
+          <SelectTrigger className={`w-full xl:w-[160px] ${c.input}`}><SelectValue /></SelectTrigger>
+          <SelectContent className={c.selectContent}>
+            <SelectItem value="all">Any orders</SelectItem>
+            <SelectItem value="with">Has orders</SelectItem>
+            <SelectItem value="without">Never ordered</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={sort} onValueChange={(v) => { setSort(v); setPage(1); }}>
+          <SelectTrigger className={`w-full xl:w-[180px] ${c.input}`}><SelectValue /></SelectTrigger>
+          <SelectContent className={c.selectContent}>
+            <SelectItem value="newest">Newest first</SelectItem>
+            <SelectItem value="oldest">Oldest first</SelectItem>
+            <SelectItem value="balance_desc">Balance: high to low</SelectItem>
+            <SelectItem value="balance_asc">Balance: low to high</SelectItem>
+            <SelectItem value="spent_desc">Top spenders</SelectItem>
+            <SelectItem value="orders_desc">Most orders</SelectItem>
+            <SelectItem value="name">Name A-Z</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2"><Label className={`text-xs ${c.textMuted}`}>Joined from</Label>
+          <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className={`h-9 w-[150px] ${c.input}`} /></div>
+        <div className="flex items-center gap-2"><Label className={`text-xs ${c.textMuted}`}>to</Label>
+          <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className={`h-9 w-[150px] ${c.input}`} /></div>
+        {filtersActive && <Button variant="outline" size="sm" onClick={clearFilters} className={`${c.border} ${c.textSecondary}`}><X className="w-4 h-4 mr-1" />Clear filters</Button>}
+        <span className={`ml-auto hidden md:block text-xs ${c.textMuted}`}>Shortcuts: <kbd>/</kbd> search &middot; <kbd>r</kbd> refresh &middot; <kbd>Esc</kbd> clear selection</span>
       </div>
 
-      <Card className="bg-[#1e293b] border border-[#334155] rounded-[12px]">
+      {/* Bulk bar */}
+      {selectedIds.size > 0 && (
+        <div className={`sticky top-[88px] z-30 flex flex-wrap items-center gap-2 rounded-[12px] border px-4 py-3 shadow-lg ${c.card} ${c.border}`} data-testid="users-bulk-bar">
+          <span className={`text-sm font-medium ${c.text}`}>{selectedIds.size} selected</span>
+          <span className={`text-xs ${c.textMuted}`}>{money(selectedBalance)} combined balance</span>
+          <div className="flex flex-wrap items-center gap-2 ml-auto">
+            <Button size="sm" onClick={() => openBulkBalance(true)} className="bg-[#7c3aed] hover:bg-[#8b5cf6] text-white"><DollarSign className="w-4 h-4 mr-1" />Add balance</Button>
+            <Button size="sm" variant="outline" onClick={() => openNotify(selectedUsers)} className={`${c.border} ${c.textSecondary}`}><Bell className="w-4 h-4 mr-1" />Notify</Button>
+            <Button size="sm" variant="outline" disabled={!!bulkWorking} onClick={() => bulkStatus('active')} className={`${c.border} text-green-500`}>
+              {bulkWorking === 'active' ? <Loader2 className="w-4 h-4 animate-spin" /> : <><CheckCircle className="w-4 h-4 mr-1" />Unban</>}
+            </Button>
+            <Button size="sm" disabled={!!bulkWorking} onClick={() => bulkStatus('banned')} className="bg-red-600 hover:bg-red-700 text-white" data-testid="users-bulk-ban">
+              {bulkWorking === 'banned' ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Ban className="w-4 h-4 mr-1" />Ban</>}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())} className={c.textSecondary}>Clear</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Table */}
+      <Card className={`${c.card} border ${c.border} rounded-[12px] overflow-hidden`}>
         <CardContent className="p-0">
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 animate-spin text-[#7c3aed]" />
-            </div>
+            <div className="flex items-center justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-[#7c3aed]" /></div>
           ) : users.length > 0 ? (
             <div className="overflow-x-auto">
-              <table className="w-full">
+              <table className="w-full min-w-[1040px] table-fixed">
+                <colgroup>
+                  <col style={{ width: 44 }} /><col />
+                  <col style={{ width: 110 }} /><col style={{ width: 76 }} /><col style={{ width: 96 }} />
+                  <col style={{ width: 108 }} /><col style={{ width: 108 }} /><col style={{ width: 96 }} /><col style={{ width: 222 }} />
+                </colgroup>
                 <thead>
-                  <tr className="border-b border-[#334155]">
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-[#64748b] uppercase">User</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-[#64748b] uppercase">Email</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-[#64748b] uppercase">Balance</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-[#64748b] uppercase">Orders</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-[#64748b] uppercase">Joined</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-[#64748b] uppercase">Status</th>
-                    <th className="text-left py-3 px-4 text-xs font-semibold text-[#64748b] uppercase">Actions</th>
+                  <tr className={`border-b ${c.border}`}>
+                    <th className="px-3 py-3 text-left"><Checkbox checked={allSelected ? true : someSelected ? 'indeterminate' : false} onCheckedChange={toggleAll} aria-label="Select all users on this page" /></th>
+                    {['User', 'Balance', 'Orders', 'Spent', 'Last order', 'Joined', 'Status', 'Quick actions'].map((h) => (
+                      <th key={h} className={`px-2 py-3 text-left text-xs font-semibold uppercase ${c.textMuted} whitespace-nowrap`}>{h}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {users.map((user) => (
-                    <tr key={user.id} className="border-b border-[#334155] last:border-0 hover:bg-[#334155]/30">
-                      <td className="py-4 px-4 text-sm font-medium text-[#f1f5f9]">{user.name}</td>
-                      <td className="py-4 px-4 text-sm text-[#94a3b8]">{user.email}</td>
-                      <td className="py-4 px-4 text-sm text-[#f1f5f9] font-semibold">${user.balance.toFixed(2)}</td>
-                      <td className="py-4 px-4 text-sm text-[#94a3b8]">{user.ordersCount}</td>
-                      <td className="py-4 px-4 text-sm text-[#94a3b8]">{formatDate(user.createdAt)}</td>
-                      <td className="py-4 px-4">
-                        <Badge className={user.status === 'active'
-                          ? 'bg-green-500/20 text-green-400 border-green-500/30 border'
-                          : 'bg-red-500/20 text-red-400 border-red-500/30 border'
-                        }>
-                          {user.status}
-                        </Badge>
-                      </td>
-                      <td className="py-4 px-4">
-                        <div className="flex items-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openActivity(user)}
-                            className="h-8 px-3 text-blue-400 hover:text-blue-300 hover:bg-blue-500/20"
-                            title="Activity"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openNotify(user)}
-                            className="h-8 px-3 text-amber-400 hover:text-amber-300 hover:bg-amber-500/20"
-                            title="Notify"
-                          >
-                            <Bell className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openReport(user)}
-                            className="h-8 px-3 text-green-400 hover:text-green-300 hover:bg-green-500/20"
-                            title="Report"
-                          >
-                            <BarChart3 className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => openBalanceDialog(user)}
-                            className="h-8 px-3 text-[#94a3b8] hover:text-[#f1f5f9] hover:bg-[#334155]"
-                            title="Edit Balance"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => toggleUserStatus(user.id)}
-                            className={`h-8 px-3 ${user.status === 'active' 
-                              ? 'text-red-400 hover:text-red-300 hover:bg-red-500/20' 
-                              : 'text-green-400 hover:text-green-300 hover:bg-green-500/20'
-                            }`}
-                            title={user.status === 'active' ? 'Ban User' : 'Unban User'}
-                          >
-                            {user.status === 'active' ? <Ban className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
-                          </Button>
-                          <Link to={`/admin/users/${user.id}/services`}>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 px-3 text-amber-400 hover:text-amber-300 hover:bg-amber-500/20"
-                              title="Special Services"
-                            >
-                              <Star className="w-4 h-4" />
+                  {users.map((user) => {
+                    const banned = user.status === 'banned';
+                    return (
+                      <tr key={user.id} className={`border-b ${c.border} last:border-0 ${c.cardHover} ${selectedIds.has(user.id) ? (theme === 'dark' ? 'bg-[#7c3aed]/10' : 'bg-[#7c3aed]/5') : ''} ${banned ? 'opacity-70' : ''}`}>
+                        <td className="px-3 py-3"><Checkbox checked={selectedIds.has(user.id)} onCheckedChange={(v) => toggleOne(user.id, v)} aria-label={`Select ${user.name}`} /></td>
+                        <td className="px-2 py-3 min-w-0">
+                          <button type="button" onClick={() => openDrawer(user)} className="flex items-center gap-3 min-w-0 w-full text-left group" title="Open quick view">
+                            <span className="h-9 w-9 shrink-0 rounded-full bg-[#7c3aed]/20 text-[#7c3aed] flex items-center justify-center text-sm font-semibold">{(user.name || user.email || '?').slice(0, 1).toUpperCase()}</span>
+                            <TruncateTip text={`${user.name} - ${user.email}`}>
+                              <span className="min-w-0 block">
+                                <span className={`block truncate text-sm font-medium ${c.text} group-hover:text-[#7c3aed]`}>{user.name}</span>
+                                <span className={`block truncate text-xs ${c.textMuted}`}>{user.email}</span>
+                              </span>
+                            </TruncateTip>
+                          </button>
+                        </td>
+                        <td className={`px-2 py-3 text-sm font-semibold ${c.text} whitespace-nowrap`}>{money(user.balance)}</td>
+                        <td className={`px-2 py-3 text-sm ${c.textSecondary}`}>{user.ordersCount}</td>
+                        <td className={`px-2 py-3 text-sm ${c.textSecondary} whitespace-nowrap`}>{money(user.totalSpent)}</td>
+                        <td className={`px-2 py-3 text-xs ${c.textSecondary} whitespace-nowrap`}>{user.lastOrderAt ? fmtDay(user.lastOrderAt) : '-'}</td>
+                        <td className={`px-2 py-3 text-xs ${c.textSecondary} whitespace-nowrap`}>{fmtDay(user.createdAt)}</td>
+                        <td className="px-2 py-3">
+                          <Badge className={banned ? 'bg-red-500/20 text-red-500 border-red-500/30 border' : 'bg-green-500/20 text-green-500 border-green-500/30 border'}>{user.status}</Badge>
+                        </td>
+                        <td className="px-2 py-3">
+                          <div className="flex items-center gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => openBalance(user)} title="Add / deduct balance" aria-label="Add or deduct balance" className="h-8 px-2 text-[#7c3aed] hover:bg-[#7c3aed]/10" data-testid={`user-balance-${user.id}`}>
+                              <DollarSign className="w-4 h-4" /><span className="text-xs ml-0.5">Funds</span>
                             </Button>
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                            <Button variant="ghost" size="sm" onClick={() => openNotify([user])} title="Send notification" aria-label="Send notification" className="h-8 w-8 p-0 text-amber-500 hover:bg-amber-500/10"><Bell className="w-4 h-4" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => openDrawer(user)} title="Quick view" aria-label="Quick view" className={`h-8 w-8 p-0 ${c.textSecondary}`}><Eye className="w-4 h-4" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => setUserStatus(user, banned ? 'active' : 'banned')} title={banned ? 'Unban' : 'Ban'} aria-label={banned ? 'Unban user' : 'Ban user'} className={`h-8 w-8 p-0 ${banned ? 'text-green-500 hover:bg-green-500/10' : 'text-red-500 hover:bg-red-500/10'}`} data-testid={`user-ban-${user.id}`}>
+                              {banned ? <CheckCircle className="w-4 h-4" /> : <Ban className="w-4 h-4" />}
+                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild><Button variant="ghost" size="sm" aria-label="More actions" className={`h-8 w-8 p-0 ${c.textSecondary}`}><MoreHorizontal className="w-4 h-4" /></Button></DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className={`${c.card} ${c.border} w-52`}>
+                                <DropdownMenuItem onClick={() => openActivity(user)} className={c.text}><Activity className="w-4 h-4 mr-2" />Activity log</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => openReport(user)} className={c.text}><BarChart3 className="w-4 h-4 mr-2" />Spending report</DropdownMenuItem>
+                                <DropdownMenuItem asChild className={c.text}><Link to={`/admin/users/${user.id}/services`}><Star className="w-4 h-4 mr-2" />Special services</Link></DropdownMenuItem>
+                                <DropdownMenuItem asChild className={c.text}><Link to={`/admin/orders?search=${encodeURIComponent(user.email)}`}><ShoppingCart className="w-4 h-4 mr-2" />View orders</Link></DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => copy(user.email, `${user.id}-mail`)} className={c.text}><Copy className="w-4 h-4 mr-2" />{copiedKey === `${user.id}-mail` ? 'Copied' : 'Copy email'}</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => copy(user.id, `${user.id}-id`)} className={c.text}><Copy className="w-4 h-4 mr-2" />{copiedKey === `${user.id}-id` ? 'Copied' : 'Copy user id'}</DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           ) : (
-            <div className="py-12 text-center text-[#64748b]">
+            <div className={`py-14 text-center ${c.textMuted}`}>
               <Users className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>No users found</p>
+              <p>{filtersActive ? 'No users match your filters' : 'No users yet'}</p>
+              {filtersActive && <Button variant="outline" size="sm" onClick={clearFilters} className={`mt-3 ${c.border} ${c.textSecondary}`}>Clear filters</Button>}
             </div>
           )}
         </CardContent>
-
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-[#334155]">
-            <p className="text-sm text-[#64748b]">Page {page} of {totalPages}</p>
+        {(totalPages > 1 || total > 25) && (
+          <div className={`flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t ${c.border}`}>
+            <div className="flex items-center gap-3">
+              <p className={`text-sm ${c.textMuted}`}>Page {page} of {totalPages}</p>
+              <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1); }}>
+                <SelectTrigger className={`h-8 w-[110px] text-xs ${c.input}`}><SelectValue /></SelectTrigger>
+                <SelectContent className={c.selectContent}>{[25, 50, 100].map((n) => <SelectItem key={n} value={String(n)}>{n} / page</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="h-8 px-3 border-[#334155] text-[#94a3b8]"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="h-8 px-3 border-[#334155] text-[#94a3b8]"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </Button>
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} aria-label="Previous page" className={`h-9 w-9 p-0 ${c.border} ${c.textSecondary}`}><ChevronLeft className="w-4 h-4" /></Button>
+              <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages} aria-label="Next page" className={`h-9 w-9 p-0 ${c.border} ${c.textSecondary}`}><ChevronRight className="w-4 h-4" /></Button>
             </div>
           </div>
         )}
       </Card>
 
-      {/* Balance Dialog */}
-      <Dialog open={balanceDialogOpen} onOpenChange={setBalanceDialogOpen}>
-        <DialogContent className="bg-[#1e293b] border-[#334155] text-[#f1f5f9]">
+      {/* Quick view drawer */}
+      <Sheet open={!!drawerUser} onOpenChange={(o) => { if (!o) { setDrawerUser(null); setOverview(null); } }}>
+        <SheetContent className={`${c.card} ${c.border} ${c.text} w-full sm:max-w-md overflow-y-auto`}>
+          <SheetHeader>
+            <SheetTitle className={c.text}>{drawerUser?.name}</SheetTitle>
+            <SheetDescription className={`${c.textMuted} break-all`}>{drawerUser?.email}</SheetDescription>
+          </SheetHeader>
+          {overviewLoading || !overview ? (
+            <div className="flex justify-center py-12"><Loader2 className="w-6 h-6 animate-spin text-[#7c3aed]" /></div>
+          ) : (
+            <div className="mt-5 space-y-5" data-testid="user-drawer">
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={() => openBalance({ ...drawerUser, balance: overview.balance })} className="bg-[#7c3aed] hover:bg-[#8b5cf6] text-white"><DollarSign className="w-4 h-4 mr-1" />Add / deduct</Button>
+                <Button size="sm" variant="outline" onClick={() => openNotify([drawerUser])} className={`${c.border} ${c.textSecondary}`}><Bell className="w-4 h-4 mr-1" />Notify</Button>
+                <Button size="sm" variant="outline" onClick={() => setUserStatus({ ...drawerUser, status: overview.status }, overview.status === 'banned' ? 'active' : 'banned').then?.(() => loadOverview(drawerUser.id))} className={`${c.border} ${overview.status === 'banned' ? 'text-green-500' : 'text-red-500'}`}>
+                  {overview.status === 'banned' ? <><CheckCircle className="w-4 h-4 mr-1" />Unban</> : <><Ban className="w-4 h-4 mr-1" />Ban</>}
+                </Button>
+                <Button size="sm" variant="outline" asChild className={`${c.border} ${c.textSecondary}`}><Link to={`/admin/orders?search=${encodeURIComponent(overview.email)}`}><ShoppingCart className="w-4 h-4 mr-1" />Orders</Link></Button>
+                <Button size="sm" variant="outline" asChild className={`${c.border} ${c.textSecondary}`}><Link to={`/admin/users/${overview.id}/services`}><Star className="w-4 h-4 mr-1" />Special ({overview.specialServices})</Link></Button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  ['Balance', money(overview.balance)], ['Total spent', money(overview.totalSpent)],
+                  ['Deposited', money(overview.totalDeposited)], ['Refunded', money(overview.totalRefunded)],
+                  ['Orders', overview.ordersCount], ['Last order', overview.lastOrderAt ? fmtDay(overview.lastOrderAt) : '-'],
+                  ['Joined', fmtDay(overview.createdAt)], ['Referral code', overview.referralCode || '-'],
+                ].map(([label, value]) => (
+                  <div key={label} className={`rounded-md border ${c.border} px-3 py-2`}>
+                    <p className={`text-[11px] uppercase ${c.textMuted}`}>{label}</p>
+                    <p className={`text-sm font-semibold ${c.text} break-words`}>{value}</p>
+                  </div>
+                ))}
+              </div>
+              {Object.keys(overview.statusCounts || {}).length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {Object.entries(overview.statusCounts).map(([s, n]) => (
+                    <span key={s} className={`text-xs rounded-full border ${c.border} px-2 py-1 ${ORDER_STATUS_STYLE[s] || c.textSecondary}`}>{s}: {n}</span>
+                  ))}
+                </div>
+              )}
+              <div>
+                <p className={`text-sm font-semibold ${c.text} mb-2`}>Recent orders</p>
+                {overview.recentOrders.length === 0 ? <p className={`text-xs ${c.textMuted}`}>No orders yet.</p> : (
+                  <div className={`rounded-md border ${c.border} divide-y ${theme === 'dark' ? 'divide-[#334155]' : 'divide-[#e2e8f0]'}`}>
+                    {overview.recentOrders.map((o) => (
+                      <div key={o.id} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+                        <span className="min-w-0"><span className="font-mono">#{o.orderNumber ?? o.id.slice(-6)}</span> <span className={`${c.textSecondary} truncate`}>{o.serviceName}</span></span>
+                        <span className="shrink-0 text-right"><b className={c.text}>{money(o.charge, 4)}</b> <span className={ORDER_STATUS_STYLE[o.status] || c.textSecondary}>{o.status}</span></span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div>
+                <p className={`text-sm font-semibold ${c.text} mb-2`}>Recent transactions</p>
+                {overview.recentTransactions.length === 0 ? <p className={`text-xs ${c.textMuted}`}>No transactions yet.</p> : (
+                  <div className={`rounded-md border ${c.border} divide-y ${theme === 'dark' ? 'divide-[#334155]' : 'divide-[#e2e8f0]'}`}>
+                    {overview.recentTransactions.map((tx) => (
+                      <div key={tx.id} className="flex items-center justify-between gap-3 px-3 py-2 text-xs">
+                        <span className={`min-w-0 truncate ${c.textSecondary}`} title={tx.description}>{tx.description || tx.type}</span>
+                        <span className={`shrink-0 font-semibold ${tx.type === 'credit' ? 'text-green-500' : 'text-red-500'}`}>{tx.type === 'credit' ? '+' : '-'}{money(tx.amount, 4)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2 pt-1">
+                <Button size="sm" variant="ghost" onClick={() => openActivity(drawerUser)} className={c.textSecondary}><Activity className="w-4 h-4 mr-1" />Activity</Button>
+                <Button size="sm" variant="ghost" onClick={() => openReport(drawerUser)} className={c.textSecondary}><BarChart3 className="w-4 h-4 mr-1" />Report</Button>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Balance */}
+      <Dialog open={!!balanceUser} onOpenChange={(o) => { if (!o) setBalanceUser(null); }}>
+        <DialogContent className={`${c.card} ${c.border} ${c.text}`}>
           <DialogHeader>
-            <DialogTitle>Edit Balance - {selectedUser?.name}</DialogTitle>
+            <DialogTitle>Add / deduct balance</DialogTitle>
+            <DialogDescription className={c.textMuted}>{balanceUser?.name} &middot; {balanceUser?.email}</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-[#94a3b8]">
-              Current Balance: <span className="font-semibold text-[#f1f5f9]">${selectedUser?.balance.toFixed(2)}</span>
-            </p>
-            <div className="space-y-2">
-              <Label>Action</Label>
-              <Select value={balanceType} onValueChange={setBalanceType}>
-                <SelectTrigger className="bg-[#0f172a] border-[#334155] text-[#f1f5f9]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-[#1e293b] border-[#334155]">
-                  <SelectItem value="add">Add Balance</SelectItem>
-                  <SelectItem value="deduct">Deduct Balance</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Amount</Label>
-              <Input
-                type="number"
-                step="0.01"
-                value={balanceAmount}
-                onChange={(e) => setBalanceAmount(e.target.value)}
-                className="bg-[#0f172a] border-[#334155] text-[#f1f5f9]"
-                placeholder="0.00"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Note (optional)</Label>
-              <Input
-                value={balanceNote}
-                onChange={(e) => setBalanceNote(e.target.value)}
-                className="bg-[#0f172a] border-[#334155] text-[#f1f5f9]"
-                placeholder="Reason for adjustment..."
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setBalanceDialogOpen(false)} className="border-[#334155] text-[#94a3b8]">
-              Cancel
-            </Button>
-            <Button onClick={handleBalanceUpdate} disabled={submitting} className="bg-[#7c3aed] hover:bg-[#8b5cf6]">
-              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Update Balance'}
-            </Button>
-          </DialogFooter>
+          {balanceUser && (
+            <form onSubmit={submitBalance} className="space-y-4">
+              <div className="grid grid-cols-2 gap-2">
+                {[['add', 'Add balance'], ['deduct', 'Deduct balance']].map(([val, label]) => (
+                  <button key={val} type="button" onClick={() => setBalanceType(val)}
+                    className={`rounded-md border px-3 py-2 text-sm font-medium transition ${balanceType === val ? (val === 'add' ? 'border-green-500 bg-green-500/15 text-green-500' : 'border-red-500 bg-red-500/15 text-red-500') : `${c.border} ${c.textSecondary}`}`}>{label}</button>
+                ))}
+              </div>
+              <div className="space-y-2">
+                <Label>Amount ($)</Label>
+                <Input type="number" step="0.01" min="0" value={balanceAmount} onChange={(e) => setBalanceAmount(e.target.value)} placeholder="0.00" className={c.input} autoFocus data-testid="balance-amount" />
+                <div className="flex flex-wrap gap-2">
+                  {QUICK_AMOUNTS.map((a) => (
+                    <button key={a} type="button" onClick={() => setBalanceAmount(String(a))} className={`rounded-full border px-3 py-1 text-xs ${c.border} ${c.textSecondary} hover:border-[#7c3aed] hover:text-[#7c3aed]`}>${a}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Note (optional)</Label>
+                <Input value={balanceNote} onChange={(e) => setBalanceNote(e.target.value)} placeholder="Reason for adjustment..." className={c.input} />
+              </div>
+              <p className={`text-xs ${c.textMuted}`}>
+                Balance: {money(balanceUser.balance)} &rarr; <b className={balanceAfter < 0 ? 'text-red-500' : c.text}>{money(balanceAfter)}</b>
+              </p>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setBalanceUser(null)} className={`${c.border} ${c.textSecondary}`}>Cancel</Button>
+                <Button type="submit" disabled={balanceSaving || !(parseFloat(balanceAmount) > 0)} className="bg-[#7c3aed] hover:bg-[#8b5cf6]" data-testid="balance-submit">
+                  {balanceSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : balanceType === 'add' ? `Add ${money(parseFloat(balanceAmount) || 0)}` : `Deduct ${money(parseFloat(balanceAmount) || 0)}`}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
 
-      <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
-        <DialogContent className="bg-[#1e293b] border-[#334155] text-[#f1f5f9]">
-          <DialogHeader>
-            <DialogTitle>Bulk Add Balance</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <Label>Select All Users</Label>
-              <input type="checkbox" checked={bulkSelectAll} onChange={(e) => setBulkSelectAll(e.target.checked)} />
-            </div>
-            {!bulkSelectAll && (
+      {/* Bulk balance */}
+      <Dialog open={bulkBalanceOpen} onOpenChange={setBulkBalanceOpen}>
+        <DialogContent className={`${c.card} ${c.border} ${c.text}`}>
+          <DialogHeader><DialogTitle>Bulk add balance</DialogTitle></DialogHeader>
+          <form onSubmit={submitBulkBalance} className="space-y-4">
+            <label className={`flex items-center justify-between gap-3 text-sm cursor-pointer ${c.text}`}>
+              Add to every user ({totalAll})
+              <Checkbox checked={bulkAll} onCheckedChange={(v) => setBulkAll(v === true)} />
+            </label>
+            {!bulkAll && (
               <div className="space-y-2">
                 <Label>Emails (one per line)</Label>
-                <textarea
-                  value={bulkEmails}
-                  onChange={(e) => setBulkEmails(e.target.value)}
-                  className="w-full min-h-[120px] rounded-[8px] p-3 text-sm bg-[#0f172a] border border-[#334155] text-[#f1f5f9]"
-                  placeholder="user1@email.com&#10;user2@email.com"
-                />
+                <textarea value={bulkEmails} onChange={(e) => setBulkEmails(e.target.value)} className={`w-full min-h-[120px] rounded-[8px] p-3 text-sm ${c.input}`} placeholder={'user1@email.com\nuser2@email.com'} />
               </div>
             )}
-            <div className="space-y-2">
-              <Label>Amount ($) to add</Label>
-              <Input type="number" step="0.01" value={bulkAmount} onChange={(e) => setBulkAmount(e.target.value)} className="bg-[#0f172a] border-[#334155] text-[#f1f5f9]" />
-            </div>
-            <div className="space-y-2">
-              <Label>Reason/Note</Label>
-              <Input value={bulkNote} onChange={(e) => setBulkNote(e.target.value)} className="bg-[#0f172a] border-[#334155] text-[#f1f5f9]" placeholder="Admin bulk credit..." />
-            </div>
-            <div className="text-sm text-[#94a3b8]">
-              This will add ${bulkAmt > 0 ? bulkAmt.toFixed(2) : '0.00'} to {bulkCount} users (Total: ${bulkTotal.toFixed(2)})
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setBulkDialogOpen(false)} className="border-[#334155] text-[#94a3b8]">Cancel</Button>
-            <Button onClick={submitBulkBalance} disabled={submitting} className="bg-[#7c3aed] hover:bg-[#8b5cf6]">
-              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirm'}
-            </Button>
-          </DialogFooter>
+            <div className="space-y-2"><Label>Amount ($) to add to each</Label>
+              <Input type="number" step="0.01" min="0" value={bulkAmount} onChange={(e) => setBulkAmount(e.target.value)} className={c.input} /></div>
+            <div className="space-y-2"><Label>Reason / note</Label>
+              <Input value={bulkNote} onChange={(e) => setBulkNote(e.target.value)} placeholder="Admin bulk credit..." className={c.input} /></div>
+            <p className={`text-sm ${c.textSecondary}`}>
+              Adds {money(Number(bulkAmount) > 0 ? Number(bulkAmount) : 0)} to {bulkCount} users (total {money(bulkCount * (Number(bulkAmount) > 0 ? Number(bulkAmount) : 0))})
+            </p>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setBulkBalanceOpen(false)} className={`${c.border} ${c.textSecondary}`}>Cancel</Button>
+              <Button type="submit" disabled={bulkBalanceSaving} className="bg-[#7c3aed] hover:bg-[#8b5cf6]">{bulkBalanceSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Confirm'}</Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={activityOpen} onOpenChange={setActivityOpen}>
-        <DialogContent className="bg-[#1e293b] border-[#334155] text-[#f1f5f9] max-w-[720px]">
+      {/* Notify */}
+      <Dialog open={!!notifyTargets} onOpenChange={(o) => { if (!o) setNotifyTargets(null); }}>
+        <DialogContent className={`${c.card} ${c.border} ${c.text}`}>
           <DialogHeader>
-            <DialogTitle>User Activity - {activityUser?.email}</DialogTitle>
+            <DialogTitle>Send notification</DialogTitle>
+            <DialogDescription className={c.textMuted}>
+              {notifyTargets?.length === 1 ? notifyTargets[0].email : `${notifyTargets?.length || 0} users selected`}
+            </DialogDescription>
           </DialogHeader>
+          <form onSubmit={sendNotify} className="space-y-4">
+            <div className="space-y-2"><Label>Title</Label><Input value={notifyTitle} onChange={(e) => setNotifyTitle(e.target.value)} className={c.input} maxLength={120} autoFocus /></div>
+            <div className="space-y-2"><Label>Message</Label>
+              <textarea value={notifyMessage} onChange={(e) => setNotifyMessage(e.target.value)} className={`w-full min-h-[110px] rounded-[8px] p-3 text-sm ${c.input}`} maxLength={2000} /></div>
+            <div className="space-y-2"><Label>Type</Label>
+              <Select value={notifyType} onValueChange={setNotifyType}>
+                <SelectTrigger className={c.input}><SelectValue /></SelectTrigger>
+                <SelectContent className={c.selectContent}>
+                  <SelectItem value="info">Info</SelectItem><SelectItem value="warning">Warning</SelectItem><SelectItem value="success">Success</SelectItem>
+                </SelectContent>
+              </Select></div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setNotifyTargets(null)} className={`${c.border} ${c.textSecondary}`}>Cancel</Button>
+              <Button type="submit" disabled={notifySending} className="bg-[#7c3aed] hover:bg-[#8b5cf6]">{notifySending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Send'}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Activity */}
+      <Dialog open={!!activityUser} onOpenChange={(o) => { if (!o) setActivityUser(null); }}>
+        <DialogContent className={`${c.card} ${c.border} ${c.text} max-w-[720px]`}>
+          <DialogHeader><DialogTitle className="break-all">Activity - {activityUser?.email}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div className="flex items-center gap-3">
               <Label>Filter</Label>
-              <Select value={activityFilter} onValueChange={applyActivityFilter}>
-                <SelectTrigger className="w-[220px] bg-[#0f172a] border-[#334155] text-[#f1f5f9]"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-[#1e293b] border-[#334155]">
+              <Select value={activityFilter} onValueChange={(v) => { setActivityFilter(v); loadActivity(activityUser, v); }}>
+                <SelectTrigger className={`w-[220px] ${c.input}`}><SelectValue /></SelectTrigger>
+                <SelectContent className={c.selectContent}>
                   <SelectItem value="all">All</SelectItem>
-                  {['Login', 'Order Placed', 'Funds Added', 'Password Changed', 'API Key Generated', 'Register', 'Order Completed'].map((a) => (
-                    <SelectItem key={a} value={a}>{a}</SelectItem>
-                  ))}
+                  {['Login', 'Order Placed', 'Funds Added', 'Password Changed', 'API Key Generated', 'Register', 'Order Completed'].map((a) => <SelectItem key={a} value={a}>{a}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             {activityLoading ? (
               <div className="flex items-center justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-[#7c3aed]" /></div>
             ) : activityItems.length > 0 ? (
-              <div className="max-h-[340px] overflow-y-auto border border-[#334155] rounded-[12px]">
+              <div className={`max-h-[340px] overflow-y-auto border ${c.border} rounded-[12px]`}>
                 {activityItems.map((it) => (
-                  <div key={it.id} className="px-4 py-3 border-b border-[#334155] last:border-0">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-semibold text-[#f1f5f9]">{it.action}</span>
-                      <span className="text-xs text-[#64748b]">{it.createdAt ? new Date(it.createdAt).toLocaleString() : ''}</span>
+                  <div key={it.id} className={`px-4 py-3 border-b last:border-0 ${c.border}`}>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className={`text-sm font-semibold ${c.text}`}>{it.action}</span>
+                      <span className={`text-xs ${c.textMuted}`}>{fmtDateTime(it.createdAt)}</span>
                     </div>
-                    {it.details && <div className="text-xs text-[#94a3b8] mt-1">{it.details}</div>}
+                    {it.details && <div className={`text-xs ${c.textSecondary} mt-1 break-words`}>{it.details}</div>}
                   </div>
                 ))}
               </div>
-            ) : (
-              <div className="text-sm text-[#94a3b8] py-6 text-center">No activity</div>
-            )}
+            ) : <div className={`text-sm ${c.textSecondary} py-6 text-center`}>No activity</div>}
           </div>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={notifyOpen} onOpenChange={setNotifyOpen}>
-        <DialogContent className="bg-[#1e293b] border-[#334155] text-[#f1f5f9]">
-          <DialogHeader>
-            <DialogTitle>Send Notification - {notifyUser?.email}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Title</Label>
-              <Input value={notifyTitle} onChange={(e) => setNotifyTitle(e.target.value)} className="bg-[#0f172a] border-[#334155] text-[#f1f5f9]" />
-            </div>
-            <div className="space-y-2">
-              <Label>Message</Label>
-              <textarea value={notifyMessage} onChange={(e) => setNotifyMessage(e.target.value)} className="w-full min-h-[120px] rounded-[8px] p-3 text-sm bg-[#0f172a] border border-[#334155] text-[#f1f5f9]" />
-            </div>
-            <div className="space-y-2">
-              <Label>Type</Label>
-              <Select value={notifyType} onValueChange={setNotifyType}>
-                <SelectTrigger className="bg-[#0f172a] border-[#334155] text-[#f1f5f9]"><SelectValue /></SelectTrigger>
-                <SelectContent className="bg-[#1e293b] border-[#334155]">
-                  <SelectItem value="info">Info</SelectItem>
-                  <SelectItem value="warning">Warning</SelectItem>
-                  <SelectItem value="success">Success</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setNotifyOpen(false)} className="border-[#334155] text-[#94a3b8]">Cancel</Button>
-            <Button onClick={sendNotification} disabled={notifySending} className="bg-[#7c3aed] hover:bg-[#8b5cf6]">
-              {notifySending ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Send'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={reportOpen} onOpenChange={setReportOpen}>
-        <DialogContent className="bg-[#1e293b] border-[#334155] text-[#f1f5f9] max-w-[720px]">
-          <DialogHeader>
-            <DialogTitle>User Report - {reportUser?.email}</DialogTitle>
-          </DialogHeader>
+      {/* Report */}
+      <Dialog open={!!reportUser} onOpenChange={(o) => { if (!o) setReportUser(null); }}>
+        <DialogContent className={`${c.card} ${c.border} ${c.text} max-w-[720px]`}>
+          <DialogHeader><DialogTitle className="break-all">Report - {reportUser?.email}</DialogTitle></DialogHeader>
           {reportLoading ? (
             <div className="flex items-center justify-center py-10"><Loader2 className="w-8 h-8 animate-spin text-[#7c3aed]" /></div>
           ) : reportData ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Card className="bg-[#0f172a] border border-[#334155] rounded-[12px]">
-                <CardContent className="p-5">
-                  <p className="text-sm text-[#94a3b8]">Total Spent</p>
-                  <p className="text-xl font-bold text-[#f1f5f9]">${Number(reportData.totalSpent || 0).toFixed(2)}</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-[#0f172a] border border-[#334155] rounded-[12px]">
-                <CardContent className="p-5">
-                  <p className="text-sm text-[#94a3b8]">Total Orders</p>
-                  <p className="text-xl font-bold text-[#f1f5f9]">{reportData.totalOrders || 0}</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-[#0f172a] border border-[#334155] rounded-[12px]">
-                <CardContent className="p-5">
-                  <p className="text-sm text-[#94a3b8]">Most Ordered Service</p>
-                  <p className="text-sm font-semibold text-[#f1f5f9]">{reportData.mostOrderedService || '-'}</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-[#0f172a] border border-[#334155] rounded-[12px]">
-                <CardContent className="p-5">
-                  <p className="text-sm text-[#94a3b8]">Average Order Value</p>
-                  <p className="text-xl font-bold text-[#f1f5f9]">${Number(reportData.averageOrderValue || 0).toFixed(2)}</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-[#0f172a] border border-[#334155] rounded-[12px] sm:col-span-2">
-                <CardContent className="p-5">
-                  <p className="text-sm text-[#94a3b8]">Orders This Month</p>
-                  <p className="text-xl font-bold text-[#f1f5f9]">{reportData.ordersThisMonth || 0}</p>
-                </CardContent>
-              </Card>
+              {[
+                ['Total spent', money(reportData.totalSpent)], ['Total orders', reportData.totalOrders || 0],
+                ['Most ordered service', reportData.mostOrderedService || '-'], ['Average order value', money(reportData.averageOrderValue)],
+              ].map(([label, value]) => (
+                <div key={label} className={`rounded-[12px] border ${c.border} p-5`}>
+                  <p className={`text-sm ${c.textSecondary}`}>{label}</p>
+                  <p className={`text-lg font-bold ${c.text} break-words`}>{value}</p>
+                </div>
+              ))}
+              <div className={`rounded-[12px] border ${c.border} p-5 sm:col-span-2`}>
+                <p className={`text-sm ${c.textSecondary}`}>Orders this month</p>
+                <p className={`text-lg font-bold ${c.text}`}>{reportData.ordersThisMonth || 0}</p>
+              </div>
             </div>
-          ) : (
-            <div className="text-sm text-[#94a3b8] py-6 text-center">No report data</div>
-          )}
+          ) : <div className={`text-sm ${c.textSecondary} py-6 text-center`}>No report data</div>}
         </DialogContent>
       </Dialog>
     </div>

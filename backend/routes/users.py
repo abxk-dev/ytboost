@@ -324,6 +324,248 @@ async def user_referral(request: Request):
         'referredUsers': referred_users
     }
 
+class BulkUserStatus(BaseModel):
+    ids: list[str] = []
+    status: str = Field(..., pattern="^(active|banned)$")
+
+class BulkUserNotify(BaseModel):
+    ids: list[str] = []
+    title: str = Field(..., min_length=1, max_length=120)
+    message: str = Field(..., min_length=1, max_length=2000)
+    type: str = Field("info", pattern="^(info|warning|success)$")
+
+
+def _oid_list(ids):
+    out = []
+    for i in ids:
+        try:
+            out.append(ObjectId(i))
+        except Exception:
+            continue
+    return out
+
+
+@router.get("/admin/users/list")
+async def admin_list_users(
+    request: Request,
+    page: int = 1,
+    limit: int = 50,
+    search: str = None,
+    status: str = None,
+    balance: str = None,
+    orders: str = None,
+    date_from: str = None,
+    date_to: str = None,
+    sort: str = 'newest',
+):
+    """Users list with search, filters, sort, status counts, balance total and per-user order stats."""
+    import re
+    from backend.middleware.admin import get_current_admin
+    await get_current_admin(request, db)
+
+    page = max(1, page)
+    limit = max(1, min(limit, 200))
+    clauses = [{'role': {'$ne': 'admin'}}]
+    s = (search or '').strip()
+    if s:
+        rx = {'$regex': re.escape(s), '$options': 'i'}
+        ors = [{'name': rx}, {'email': rx}, {'referralCode': s.upper()}]
+        if re.fullmatch(r'[0-9a-fA-F]{24}', s):
+            ors.append({'_id': ObjectId(s)})
+        clauses.append({'$or': ors})
+    if balance == 'zero':
+        clauses.append({'$or': [{'balance': {'$lte': 0}}, {'balance': {'$exists': False}}]})
+    elif balance == 'under10':
+        clauses.append({'balance': {'$gt': 0, '$lt': 10}})
+    elif balance == 'over10':
+        clauses.append({'balance': {'$gte': 10}})
+    if orders in ('with', 'without'):
+        with_orders = await db.orders.distinct('userId')
+        clauses.append({'_id': ({'$in': with_orders} if orders == 'with' else {'$nin': with_orders})})
+    try:
+        if date_from:
+            clauses.append({'createdAt': {'$gte': datetime.strptime(date_from, '%Y-%m-%d')}})
+        if date_to:
+            clauses.append({'createdAt': {'$lt': datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)}})
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dates must be YYYY-MM-DD")
+
+    base_query = {'$and': clauses}
+    status_clause = None
+    if status == 'active':
+        # users created before the status field existed count as active
+        status_clause = {'$or': [{'status': 'active'}, {'status': {'$exists': False}}]}
+    elif status == 'banned':
+        status_clause = {'status': 'banned'}
+    query = {'$and': clauses + [status_clause]} if status_clause else base_query
+
+    counts = {'active': 0, 'banned': 0}
+    async for row in db.users.aggregate([{'$match': base_query}, {'$group': {'_id': {'$ifNull': ['$status', 'active']}, 'n': {'$sum': 1}}}]):
+        counts[row['_id']] = row['n']
+    total = await db.users.count_documents(query)
+    bal_rows = await db.users.aggregate([{'$match': query}, {'$group': {'_id': None, 'sum': {'$sum': '$balance'}}}]).to_list(1)
+    total_balance = float(bal_rows[0]['sum']) if bal_rows else 0.0
+
+    stat_pipeline = lambda ids: [
+        {'$match': {'userId': {'$in': ids}}},
+        {'$group': {
+            '_id': '$userId',
+            'orders': {'$sum': 1},
+            'spent': {'$sum': {'$cond': [{'$or': [{'$ifNull': ['$refundedAt', False]}, {'$eq': ['$status', 'Cancelled']}]}, 0, '$charge']}},
+            'last': {'$max': '$createdAt'},
+        }},
+    ]
+
+    by_stats = sort in ('spent_desc', 'orders_desc')
+    if by_stats:
+        all_ids = [u['_id'] for u in await db.users.find(query, {'_id': 1}).to_list(20000)]
+        stats_all = {r['_id']: r async for r in db.orders.aggregate(stat_pipeline(all_ids))} if all_ids else {}
+        key = (lambda i: stats_all.get(i, {}).get('spent', 0)) if sort == 'spent_desc' else (lambda i: stats_all.get(i, {}).get('orders', 0))
+        all_ids.sort(key=key, reverse=True)
+        page_ids = all_ids[(page - 1) * limit: page * limit]
+        found = {u['_id']: u for u in await db.users.find({'_id': {'$in': page_ids}}, {'password': 0}).to_list(len(page_ids) or 1)}
+        users = [found[i] for i in page_ids if i in found]
+        stats = stats_all
+    else:
+        sort_map = {
+            'newest': [('createdAt', -1)], 'oldest': [('createdAt', 1)],
+            'balance_desc': [('balance', -1)], 'balance_asc': [('balance', 1)], 'name': [('name', 1)],
+        }
+        users = await db.users.find(query, {'password': 0}).sort(sort_map.get(sort, sort_map['newest'])).skip((page - 1) * limit).limit(limit).to_list(limit)
+        ids = [u['_id'] for u in users]
+        stats = {r['_id']: r async for r in db.orders.aggregate(stat_pipeline(ids))} if ids else {}
+
+    result = []
+    for u in users:
+        st = stats.get(u['_id'], {})
+        result.append({
+            'id': str(u['_id']),
+            'name': u.get('name', ''),
+            'email': u.get('email', ''),
+            'balance': float(u.get('balance', 0) or 0),
+            'status': u.get('status', 'active'),
+            'ordersCount': st.get('orders', 0),
+            'totalSpent': round(float(st.get('spent', 0) or 0), 4),
+            'lastOrderAt': st.get('last'),
+            'referralCode': u.get('referralCode', ''),
+            'apiKeyLastUsedAt': u.get('apiKeyLastUsedAt'),
+            'createdAt': u.get('createdAt'),
+        })
+    return {
+        'users': result,
+        'total': total,
+        'page': page,
+        'pages': (total + limit - 1) // limit,
+        'counts': counts,
+        'totalAll': counts['active'] + counts['banned'],
+        'totalBalance': round(total_balance, 4),
+    }
+
+
+@router.get("/admin/users/{user_id}/overview")
+async def admin_user_overview(request: Request, user_id: str):
+    """Quick view: profile, lifetime stats, recent orders and transactions."""
+    from backend.middleware.admin import get_current_admin
+    await get_current_admin(request, db)
+    try:
+        obj_id = ObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user ID")
+    user = await db.users.find_one({'_id': obj_id}, {'password': 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    agg = await db.orders.aggregate([
+        {'$match': {'userId': obj_id}},
+        {'$group': {
+            '_id': None,
+            'orders': {'$sum': 1},
+            'spent': {'$sum': {'$cond': [{'$or': [{'$ifNull': ['$refundedAt', False]}, {'$eq': ['$status', 'Cancelled']}]}, 0, '$charge']}},
+            'refunded': {'$sum': {'$ifNull': ['$refundAmount', 0]}},
+            'last': {'$max': '$createdAt'},
+        }},
+    ]).to_list(1)
+    a = agg[0] if agg else {}
+    status_counts = {}
+    async for r in db.orders.aggregate([{'$match': {'userId': obj_id}}, {'$group': {'_id': '$status', 'n': {'$sum': 1}}}]):
+        status_counts[r['_id']] = r['n']
+    deposits = await db.transactions.aggregate([
+        {'$match': {'userId': obj_id, 'type': 'credit', 'description': {'$not': {'$regex': '^Refund'}}}},
+        {'$group': {'_id': None, 'total': {'$sum': '$amount'}}},
+    ]).to_list(1)
+
+    recent_orders = await db.orders.find({'userId': obj_id}).sort('createdAt', -1).limit(5).to_list(5)
+    svc_ids = list({o['serviceId'] for o in recent_orders if o.get('serviceId')})
+    svcs = {s['_id']: s.get('name', '') for s in await db.services.find({'_id': {'$in': svc_ids}}, {'name': 1}).to_list(len(svc_ids) or 1)}
+    recent_tx = await db.transactions.find({'userId': obj_id}).sort('createdAt', -1).limit(5).to_list(5)
+
+    return {
+        'id': str(user['_id']),
+        'name': user.get('name', ''),
+        'email': user.get('email', ''),
+        'balance': float(user.get('balance', 0) or 0),
+        'status': user.get('status', 'active'),
+        'createdAt': user.get('createdAt'),
+        'referralCode': user.get('referralCode', ''),
+        'referralEarnings': float(user.get('referralEarnings', 0) or 0),
+        'apiKeyLastUsedAt': user.get('apiKeyLastUsedAt'),
+        'ordersCount': a.get('orders', 0),
+        'totalSpent': round(float(a.get('spent', 0) or 0), 4),
+        'totalRefunded': round(float(a.get('refunded', 0) or 0), 4),
+        'totalDeposited': round(float(deposits[0]['total']), 4) if deposits else 0,
+        'lastOrderAt': a.get('last'),
+        'statusCounts': status_counts,
+        'specialServices': await db.user_special_services.count_documents({'userId': obj_id}),
+        'recentOrders': [{
+            'id': str(o['_id']), 'orderNumber': o.get('japOrderId'), 'serviceName': svcs.get(o.get('serviceId'), 'Unknown'),
+            'charge': o.get('charge', 0), 'status': o.get('status', ''), 'createdAt': o.get('createdAt'),
+        } for o in recent_orders],
+        'recentTransactions': [{
+            'id': str(t['_id']), 'type': t.get('type', ''), 'amount': t.get('amount', 0),
+            'description': t.get('description', ''), 'createdAt': t.get('createdAt'),
+        } for t in recent_tx],
+    }
+
+
+@router.post("/admin/users/bulk-status")
+async def admin_bulk_user_status(request: Request, data: BulkUserStatus):
+    """Ban or unban many users at once (admins are never touched)."""
+    from backend.middleware.admin import get_current_admin, log_admin_action, require_admin_role
+    admin = await get_current_admin(request, db)
+    require_admin_role(admin, {"superadmin", "manager"})
+    ids = _oid_list(data.ids)
+    if not ids:
+        raise HTTPException(status_code=400, detail="No users selected")
+    if len(ids) > 1000:
+        raise HTTPException(status_code=400, detail="Select at most 1000 users at a time")
+    res = await db.users.update_many({'_id': {'$in': ids}, 'role': {'$ne': 'admin'}}, {'$set': {'status': data.status}})
+    await log_admin_action(db, request, admin, "USER_BULK_STATUS", f"Status: {data.status}, Users: {res.modified_count}")
+    return {'updated': res.modified_count, 'status': data.status}
+
+
+@router.post("/admin/users/bulk-notify")
+async def admin_bulk_user_notify(request: Request, data: BulkUserNotify):
+    """Send the same in-app notification to many users."""
+    from backend.middleware.admin import get_current_admin, log_admin_action, require_admin_role
+    admin = await get_current_admin(request, db)
+    require_admin_role(admin, {"superadmin", "manager", "support"})
+    ids = _oid_list(data.ids)
+    if not ids:
+        raise HTTPException(status_code=400, detail="No users selected")
+    if len(ids) > 1000:
+        raise HTTPException(status_code=400, detail="Select at most 1000 users at a time")
+    valid = [u['_id'] for u in await db.users.find({'_id': {'$in': ids}, 'role': {'$ne': 'admin'}}, {'_id': 1}).to_list(len(ids))]
+    if not valid:
+        raise HTTPException(status_code=400, detail="No matching users")
+    now = datetime.now(timezone.utc)
+    await db.notifications.insert_many([
+        {'userId': uid, 'title': data.title, 'message': data.message, 'type': data.type, 'read': False, 'createdAt': now}
+        for uid in valid
+    ])
+    await log_admin_action(db, request, admin, "USER_BULK_NOTIFY", f"Users: {len(valid)}, Title: {data.title}")
+    return {'sent': len(valid)}
+
+
 @router.get("/admin/users/{user_id}")
 async def admin_get_user(request: Request, user_id: str):
     """Get single user details (admin)"""

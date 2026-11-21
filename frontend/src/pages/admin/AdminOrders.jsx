@@ -56,8 +56,9 @@ export default function AdminOrders() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [statusFilter, setStatusFilter] = useState('');
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  const urlSearch = useMemo(() => new URLSearchParams(window.location.search).get('search') || '', []);
+  const [searchInput, setSearchInput] = useState(urlSearch);
+  const [search, setSearch] = useState(urlSearch);
   const [providerFilter, setProviderFilter] = useState('all');
   const [fulfillmentFilter, setFulfillmentFilter] = useState('all');
   const [refundFilter, setRefundFilter] = useState('all');
