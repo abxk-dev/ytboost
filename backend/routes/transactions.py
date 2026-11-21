@@ -51,6 +51,100 @@ async def get_user_transactions(request: Request, page: int = 1, limit: int = 20
         'pages': (total + limit - 1) // limit
     }
 
+_KIND_CLAUSES = {
+    'refund': {'description': {'$regex': '^Refund', '$options': 'i'}},
+    'admin': {'description': {'$regex': '^Admin', '$options': 'i'}},
+    'deposit': {'$and': [{'type': 'credit'}, {'description': {'$not': {'$regex': '^(Refund|Admin)', '$options': 'i'}}}]},
+    'order': {'$and': [{'type': 'debit'}, {'description': {'$not': {'$regex': '^Admin', '$options': 'i'}}}]},
+}
+
+
+def _tx_kind(tx: dict) -> str:
+    d = (tx.get('description') or '').lower()
+    if d.startswith('refund'):
+        return 'refund'
+    if d.startswith('admin'):
+        return 'admin'
+    return 'deposit' if tx.get('type') == 'credit' else 'order'
+
+
+def _tx_queries(user_id, kind, search, date_from, date_to):
+    import re
+    from datetime import timedelta
+    clauses = [{'userId': user_id}]
+    s = (search or '').strip()
+    if s:
+        clauses.append({'description': {'$regex': re.escape(s), '$options': 'i'}})
+    try:
+        if date_from:
+            clauses.append({'createdAt': {'$gte': datetime.strptime(date_from, '%Y-%m-%d')}})
+        if date_to:
+            clauses.append({'createdAt': {'$lt': datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)}})
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Dates must be YYYY-MM-DD")
+    base = {'$and': clauses}
+    full = {'$and': clauses + [_KIND_CLAUSES[kind]]} if kind in _KIND_CLAUSES else base
+    return clauses, base, full
+
+
+@router.get("/transactions/list")
+async def get_user_transactions_list(
+    request: Request, page: int = 1, limit: int = 20, kind: str = None,
+    search: str = None, date_from: str = None, date_to: str = None,
+):
+    """Customer transaction history with search, kind chips (deposit/order/refund/admin), dates and totals."""
+    from backend.middleware.auth import get_current_user
+    user = await get_current_user(request, db)
+    user_id = ObjectId(user['_id'])
+    page = max(1, page)
+    limit = max(1, min(limit, 100))
+    clauses, base, query = _tx_queries(user_id, kind, search, date_from, date_to)
+
+    counts = {k: await db.transactions.count_documents({'$and': clauses + [cl]}) for k, cl in _KIND_CLAUSES.items()}
+    counts_all = await db.transactions.count_documents(base)
+    total = await db.transactions.count_documents(query)
+    sums = {'credit': 0.0, 'debit': 0.0}
+    async for r in db.transactions.aggregate([{'$match': query}, {'$group': {'_id': '$type', 'sum': {'$sum': '$amount'}}}]):
+        sums[r['_id']] = float(r['sum'])
+
+    txs = await db.transactions.find(query).sort('createdAt', -1).skip((page - 1) * limit).limit(limit).to_list(limit)
+    return {
+        'transactions': [{
+            'id': str(t['_id']), 'type': t['type'], 'kind': _tx_kind(t), 'amount': t['amount'],
+            'description': t.get('description', ''), 'balanceAfter': t.get('balanceAfter', 0), 'createdAt': t['createdAt'],
+        } for t in txs],
+        'total': total, 'page': page, 'pages': (total + limit - 1) // limit,
+        'counts': counts, 'totalAll': counts_all,
+        'totalCredit': round(sums['credit'], 4), 'totalDebit': round(sums['debit'], 4),
+    }
+
+
+@router.get("/transactions/export")
+async def export_user_transactions(
+    request: Request, kind: str = None, search: str = None, date_from: str = None, date_to: str = None,
+):
+    from backend.middleware.auth import get_current_user
+    user = await get_current_user(request, db)
+    user_id = ObjectId(user['_id'])
+    _c, _b, query = _tx_queries(user_id, kind, search, date_from, date_to)
+    txs = await db.transactions.find(query).sort('createdAt', -1).to_list(20000)
+
+    def _iter_csv():
+        import csv
+        import io
+        out = io.StringIO()
+        w = csv.writer(out)
+        w.writerow(['Date', 'Type', 'Kind', 'Amount', 'Balance after', 'Description'])
+        yield out.getvalue(); out.seek(0); out.truncate(0)
+        for t in txs:
+            w.writerow([t['createdAt'].isoformat() if t.get('createdAt') else '', t.get('type', ''), _tx_kind(t),
+                        t.get('amount', 0), t.get('balanceAfter', ''), t.get('description', '')])
+            yield out.getvalue(); out.seek(0); out.truncate(0)
+
+    filename = f"my_transactions_{datetime.now(timezone.utc).date().isoformat()}.csv"
+    return StreamingResponse(_iter_csv(), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={filename}"})
+
+
 # Admin routes
 @router.get("/admin/transactions")
 async def admin_get_transactions(request: Request, page: int = 1, limit: int = 50, userId: str = None, type: str = None):
