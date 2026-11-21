@@ -62,6 +62,15 @@ class ServiceUpdate(BaseModel):
     displaySpeedMax: Optional[int] = None
     displaySpeedUnit: Optional[str] = None
 
+class MappingUpdate(BaseModel):
+    providerId: Optional[str] = None
+    providerServiceId: Optional[str] = None
+
+class BulkServiceUpdate(BaseModel):
+    ids: list[str]
+    categoryId: Optional[str] = None
+    status: Optional[bool] = None
+
 # Dependency injection placeholder
 db = None
 
@@ -227,15 +236,28 @@ async def get_user_services(request: Request):
 # Admin routes
 @router.get("/admin/services")
 async def admin_get_services(request: Request):
-    """Get all services (admin)"""
+    """Get all services (admin) with category + provider mapping details."""
     from backend.middleware.admin import get_current_admin
     await get_current_admin(request, db)
-    
-    services = await db.services.find({}).to_list(1000)
-    
+
+    services = await db.services.find({}).to_list(5000)
+    cats = {c['_id']: c for c in await db.categories.find({}).to_list(2000)}
+    provs = {p['_id']: p for p in await db.api_providers.find({}, {'name': 1, 'status': 1}).to_list(500)}
+
     result = []
     for svc in services:
-        cat = await db.categories.find_one({'_id': svc['categoryId']})
+        cat = cats.get(svc.get('categoryId'))
+        prov_id = svc.get('providerId')
+        prov = provs.get(prov_id) if prov_id else None
+        provider_service_id = svc.get('providerServiceId', '') or ''
+        if prov_id and provider_service_id and prov:
+            mapping_state = 'mapped'
+        elif prov_id and not prov:
+            mapping_state = 'broken'  # provider was deleted
+        elif prov_id or provider_service_id:
+            mapping_state = 'partial'
+        else:
+            mapping_state = 'unmapped'
         row = {
             'id': str(svc['_id']),
             'name': svc['name'],
@@ -248,13 +270,86 @@ async def admin_get_services(request: Request):
             'type': svc.get('type', 'Default'),
             'status': svc.get('status', True),
             'createdAt': svc.get('createdAt'),
+            'providerName': prov['name'] if prov else '',
+            'mappingState': mapping_state,
             **_service_fields(svc),
         }
         row['sid'] = svc.get('sid')
         row['serviceNumber'] = jap_service_number(svc)
         result.append(row)
-    
+
     return result
+
+@router.patch("/admin/services/{service_id}/mapping")
+async def admin_update_service_mapping(request: Request, service_id: str, data: MappingUpdate):
+    """Set, change or clear the provider mapping of one service."""
+    from backend.middleware.admin import get_current_admin
+    await get_current_admin(request, db)
+
+    try:
+        obj_id = ObjectId(service_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid service ID")
+    if not await db.services.find_one({'_id': obj_id}):
+        raise HTTPException(status_code=404, detail="Service not found")
+
+    provider_id = (data.providerId or '').strip()
+    provider_service_id = (data.providerServiceId or '').strip()
+
+    if not provider_id and not provider_service_id:
+        update = {'providerId': None, 'providerServiceId': '', 'fulfillmentType': 'manual'}
+        provider_name = ''
+    else:
+        if not provider_id or not provider_service_id:
+            raise HTTPException(status_code=400, detail="Select a provider and enter the provider service ID")
+        try:
+            prov_obj = ObjectId(provider_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid provider ID")
+        prov = await db.api_providers.find_one({'_id': prov_obj})
+        if not prov:
+            raise HTTPException(status_code=400, detail="Provider not found")
+        update = {'providerId': prov_obj, 'providerServiceId': provider_service_id, 'fulfillmentType': 'auto'}
+        provider_name = prov.get('name', '')
+
+    await db.services.update_one({'_id': obj_id}, {'$set': update})
+    return {
+        'message': 'Mapping updated',
+        'providerId': provider_id or None,
+        'providerName': provider_name,
+        'providerServiceId': provider_service_id,
+        'fulfillmentType': update['fulfillmentType'],
+    }
+
+@router.post("/admin/services/bulk-update")
+async def admin_bulk_update_services(request: Request, data: BulkServiceUpdate):
+    """Move many services to a category and/or enable/disable them in one call."""
+    from backend.middleware.admin import get_current_admin
+    await get_current_admin(request, db)
+
+    if not data.ids:
+        raise HTTPException(status_code=400, detail="No services selected")
+    try:
+        obj_ids = [ObjectId(i) for i in data.ids]
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid service ID in list")
+
+    update = {}
+    if data.categoryId is not None:
+        try:
+            cat_id = ObjectId(data.categoryId)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid category ID")
+        if not await db.categories.find_one({'_id': cat_id}):
+            raise HTTPException(status_code=400, detail="Category not found")
+        update['categoryId'] = cat_id
+    if data.status is not None:
+        update['status'] = data.status
+    if not update:
+        raise HTTPException(status_code=400, detail="Nothing to update")
+
+    res = await db.services.update_many({'_id': {'$in': obj_ids}}, {'$set': update})
+    return {'matched': res.matched_count, 'modified': res.modified_count}
 
 @router.post("/admin/services/seed-defaults")
 async def admin_seed_default_services(request: Request):

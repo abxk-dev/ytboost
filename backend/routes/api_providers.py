@@ -215,3 +215,54 @@ async def fetch_balance(request: Request, provider_id: str):
     if isinstance(result, dict) and result.get("error") is not None:
         return {"success": False, "error": str(result.get("error", "Unknown error"))}
     return {"success": False, "error": "Unexpected response from provider"}
+
+
+_PROVIDER_SERVICES_CACHE: dict = {}
+_PROVIDER_SERVICES_TTL = 300  # seconds
+
+@router.get("/admin/api-providers/{provider_id}/services")
+async def fetch_provider_services(request: Request, provider_id: str, refresh: bool = False):
+    """List a provider's own services (JAP action=services) so one can be picked for mapping."""
+    import time
+    from backend.middleware.admin import get_current_admin
+    await get_current_admin(request, db)
+
+    try:
+        obj_id = ObjectId(provider_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid provider ID")
+    provider = await db.api_providers.find_one({'_id': obj_id})
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+
+    cached = _PROVIDER_SERVICES_CACHE.get(provider_id)
+    if cached and not refresh and (time.time() - cached[0]) < _PROVIDER_SERVICES_TTL:
+        return {"success": True, "cached": True, "services": cached[1]}
+
+    result, err, _tried, _h = await post_smm_api(
+        (provider.get("apiUrl") or "").rstrip("/"),
+        {"key": provider.get("apiKey", ""), "action": "services"},
+        timeout=45.0,
+    )
+    if err and result is None:
+        return {"success": False, "error": err, "services": []}
+    if isinstance(result, dict) and result.get("error") is not None:
+        return {"success": False, "error": str(result.get("error")), "services": []}
+    if not isinstance(result, list):
+        return {"success": False, "error": "Unexpected response from provider", "services": []}
+
+    services = []
+    for item in result:
+        if not isinstance(item, dict):
+            continue
+        services.append({
+            "id": str(item.get("service", "")),
+            "name": str(item.get("name", "")),
+            "category": str(item.get("category", "")),
+            "rate": str(item.get("rate", "")),
+            "min": str(item.get("min", "")),
+            "max": str(item.get("max", "")),
+            "type": str(item.get("type", "")),
+        })
+    _PROVIDER_SERVICES_CACHE[provider_id] = (time.time(), services)
+    return {"success": True, "cached": False, "services": services}
