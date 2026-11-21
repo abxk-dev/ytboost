@@ -615,6 +615,100 @@ async def get_public_stats():
     }
 
 # User dashboard stats
+@router.get("/dashboard/overview")
+async def get_user_dashboard_overview(request: Request):
+    """Customer dashboard: stats, alerts, 7-day spend, top services and recent orders in one call."""
+    from backend.middleware.auth import get_current_user
+    user = await get_current_user(request, db)
+    user_id = ObjectId(user['_id'])
+    now = datetime.now(timezone.utc)
+    naive_now = now.replace(tzinfo=None)
+
+    counts = {}
+    async for r in db.orders.aggregate([{'$match': {'userId': user_id}}, {'$group': {'_id': '$status', 'n': {'$sum': 1}}}]):
+        counts[r['_id']] = r['n']
+
+    # "spent" ignores cancelled and refunded orders
+    spent_expr = {'$cond': [{'$or': [{'$ifNull': ['$refundedAt', False]}, {'$eq': ['$status', 'Cancelled']}]}, 0, '$charge']}
+    month_start = naive_now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    totals = await db.orders.aggregate([
+        {'$match': {'userId': user_id}},
+        {'$group': {
+            '_id': None,
+            'spent': {'$sum': spent_expr},
+            'month': {'$sum': {'$cond': [{'$gte': ['$createdAt', month_start]}, spent_expr, 0]}},
+        }},
+    ]).to_list(1)
+    t = totals[0] if totals else {}
+
+    # last 7 days spend, one bucket per day (oldest first)
+    start7 = (naive_now - timedelta(days=6)).replace(hour=0, minute=0, second=0, microsecond=0)
+    per_day = {}
+    async for r in db.orders.aggregate([
+        {'$match': {'userId': user_id, 'createdAt': {'$gte': start7}}},
+        {'$group': {'_id': {'$dateToString': {'format': '%Y-%m-%d', 'date': '$createdAt'}}, 'amount': {'$sum': spent_expr}, 'orders': {'$sum': 1}}},
+    ]):
+        per_day[r['_id']] = r
+    spend7 = []
+    for i in range(7):
+        d = (start7 + timedelta(days=i)).strftime('%Y-%m-%d')
+        spend7.append({'date': d, 'amount': round(float(per_day.get(d, {}).get('amount', 0)), 4), 'orders': per_day.get(d, {}).get('orders', 0)})
+
+    # most ordered services (for one-click reorder)
+    top = []
+    async for r in db.orders.aggregate([
+        {'$match': {'userId': user_id}},
+        {'$group': {'_id': '$serviceId', 'n': {'$sum': 1}, 'last': {'$max': '$createdAt'}}},
+        {'$sort': {'n': -1, 'last': -1}}, {'$limit': 4},
+    ]):
+        svc = await db.services.find_one({'_id': r['_id']})
+        if svc and svc.get('status', True):
+            top.append({'serviceId': str(svc['_id']), 'name': svc.get('name', ''), 'rate': svc.get('rate', 0), 'orders': r['n']})
+
+    recent = await db.orders.find({'userId': user_id}).sort('createdAt', -1).limit(6).to_list(6)
+    svc_ids = list({o['serviceId'] for o in recent if o.get('serviceId')})
+    svcs = {s['_id']: s for s in await db.services.find({'_id': {'$in': svc_ids}}).to_list(len(svc_ids) or 1)}
+    recent_data = []
+    for o in recent:
+        s = svcs.get(o.get('serviceId'))
+        qty = int(o.get('quantity') or 0)
+        rem = o.get('remains')
+        recent_data.append({
+            'id': str(o['_id']), 'orderNumber': o.get('japOrderId'), 'serviceId': str(o['serviceId']),
+            'serviceName': s['name'] if s else 'Unknown', 'serviceAvailable': bool(s and s.get('status', True)),
+            'link': o.get('link', ''), 'quantity': qty, 'charge': o['charge'], 'status': o['status'],
+            'delivered': max(0, qty - int(rem)) if rem is not None and qty else 0,
+            'refundAmount': o.get('refundAmount'), 'createdAt': o['createdAt'],
+        })
+
+    pending_payment = await db.crypto_payment_sessions.find_one(
+        {'userId': user_id, 'status': 'pending', 'expiresAt': {'$gt': now}}, sort=[('createdAt', -1)]
+    )
+    unread_tickets = await db.support_tickets.count_documents({'userId': user_id, 'userUnread': True})
+    unread_notifs = await db.notifications.count_documents({'userId': user_id, 'read': False})
+
+    active = sum(counts.get(s, 0) for s in ('Pending', 'Processing', 'In Progress'))
+    return {
+        'name': user.get('name', ''),
+        'balance': float(user.get('balance', 0) or 0),
+        'totalOrders': sum(counts.values()),
+        'activeOrders': active,
+        'completedOrders': counts.get('Completed', 0),
+        'statusCounts': counts,
+        'totalSpent': round(float(t.get('spent', 0) or 0), 2),
+        'spentThisMonth': round(float(t.get('month', 0) or 0), 2),
+        'spend7d': spend7,
+        'topServices': top,
+        'recentOrders': recent_data,
+        'alerts': {
+            'pendingPaymentId': str(pending_payment['_id']) if pending_payment else None,
+            'pendingPaymentAmount': pending_payment.get('amount') if pending_payment else None,
+            'unreadTickets': unread_tickets,
+            'unreadNotifications': unread_notifs,
+        },
+    }
+
+
 @router.get("/dashboard/stats")
 async def get_user_dashboard_stats(request: Request):
     """Get user dashboard statistics"""
