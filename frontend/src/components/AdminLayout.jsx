@@ -5,6 +5,7 @@ import { AdminThemeProvider, useAdminTheme, t } from '../context/AdminThemeConte
 import AdminSidebar from './AdminSidebar';
 import AdminTopbar from './AdminTopbar';
 import { Loader2 } from 'lucide-react';
+import { TooltipProvider } from './ui/tooltip';
 
 function AdminLayoutInner() {
   const { admin, loading } = useAdminAuth();
@@ -38,7 +39,9 @@ function AdminLayoutInner() {
 export default function AdminLayout() {
   return (
     <AdminThemeProvider>
-      <AdminLayoutInner />
+      <TooltipProvider delayDuration={250} skipDelayDuration={100}>
+        <AdminLayoutInner />
+      </TooltipProvider>
     </AdminThemeProvider>
   );
 }

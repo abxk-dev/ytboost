@@ -5,6 +5,7 @@ import { useSettings } from '../context/SettingsContext';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import { Loader2, X } from 'lucide-react';
+import { TooltipProvider } from './ui/tooltip';
 
 export default function DashboardLayout() {
   const { user, loading } = useAuth();
@@ -54,6 +55,7 @@ export default function DashboardLayout() {
   }
 
   return (
+    <TooltipProvider delayDuration={250} skipDelayDuration={100}>
     <div className="min-h-screen bg-[#f0f2f5]">
       <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
       <Topbar onMenuClick={() => setSidebarOpen(true)} />
@@ -70,5 +72,6 @@ export default function DashboardLayout() {
         <Outlet />
       </main>
     </div>
+    </TooltipProvider>
   );
 }

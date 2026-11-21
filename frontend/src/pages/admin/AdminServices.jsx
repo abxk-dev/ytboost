@@ -16,6 +16,7 @@ import {
   Link2, Unlink, RefreshCw, FolderPlus, ChevronsDownUp, ChevronsUpDown, X,
 } from 'lucide-react';
 import { toast } from 'sonner';
+import TruncateTip from '../../components/ui/TruncateTip';
 
 const SERVICE_TYPES = ['Default', 'Refill 30d', 'Refill 60d', 'Refill 90d', 'Drip Feed', 'Custom'];
 const QUALITY_OPTIONS = ['Ultra High', 'High', 'Medium', 'Low'];
@@ -38,7 +39,7 @@ const fmtRate = (n) => {
 };
 
 /** Click-to-edit cell. Enter/blur saves, Esc cancels. */
-function InlineEdit({ value, display, onSave, type = 'text', className = '', inputClass = '', validate, width = 'w-full' }) {
+function InlineEdit({ value, display, onSave, type = 'text', className = '', inputClass = '', validate, width = 'w-full', tip = false }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const inputRef = useRef(null);
@@ -84,16 +85,17 @@ function InlineEdit({ value, display, onSave, type = 'text', className = '', inp
       />
     );
   }
-  return (
+  const button = (
     <button
       type="button"
       onClick={start}
-      title="Click to edit"
+      title={tip ? undefined : 'Click to edit'}
       className={`text-left rounded px-1 -mx-1 py-0.5 hover:bg-[#7c3aed]/10 hover:ring-1 hover:ring-[#7c3aed]/40 transition ${className}`}
     >
       {display ?? value}
     </button>
   );
+  return tip ? <TruncateTip text={value}>{button}</TruncateTip> : button;
 }
 
 const MAPPING_BADGE = {
@@ -678,6 +680,7 @@ export default function AdminServices() {
                             <td className={`py-3 px-3 text-sm font-medium ${c.text} max-w-[380px]`}>
                               <InlineEdit
                                 value={svc.name}
+                                tip
                                 className="block truncate max-w-[370px]"
                                 onSave={(v) => saveService(svc, { name: v }, { name: v })}
                                 validate={(v) => (v ? null : 'Name cannot be empty')}
@@ -812,7 +815,9 @@ export default function AdminServices() {
                               className={`w-full text-left px-3 py-2 text-sm border-b last:border-0 ${c.border} ${picked ? 'bg-[#7c3aed]/15' : c.cardHover}`}
                             >
                               <div className="flex items-center justify-between gap-3">
-                                <span className="truncate"><b className="font-mono mr-2">#{it.id}</b>{it.name}</span>
+                                <TruncateTip text={`#${it.id} ${it.name}`}>
+                                  <span className="truncate min-w-0"><b className="font-mono mr-2">#{it.id}</b>{it.name}</span>
+                                </TruncateTip>
                                 <span className={`shrink-0 text-xs ${c.textMuted}`}>${it.rate} &middot; {it.min}-{it.max}</span>
                               </div>
                               {it.category && <div className={`text-xs ${c.textMuted} truncate`}>{it.category}</div>}
