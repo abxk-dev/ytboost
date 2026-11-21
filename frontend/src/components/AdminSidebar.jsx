@@ -58,13 +58,13 @@ export default function AdminSidebar({ isOpen, setIsOpen }) {
     <>
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-[45] lg:hidden"
           onClick={() => setIsOpen(false)}
         />
       )}
 
       <aside 
-        className={`fixed left-0 top-0 h-full w-[260px] ${c.sidebar} border-r ${c.border} z-50 transition-transform duration-300 lg:translate-x-0 ${
+        className={`fixed left-0 top-0 h-dvh w-[260px] ${c.sidebar} border-r ${c.border} z-50 transition-transform duration-300 lg:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -81,7 +81,7 @@ export default function AdminSidebar({ isOpen, setIsOpen }) {
           </button>
         </div>
 
-        <nav className="py-4 overflow-y-auto h-[calc(100%-72px)]">
+        <nav className="py-4 pb-24 overflow-y-auto h-[calc(100%-72px)]">
           <div className="px-4 py-2">
             <span className={`text-xs font-semibold ${c.textMuted} uppercase tracking-wider`}>Overview</span>
           </div>

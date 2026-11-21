@@ -49,14 +49,14 @@ export default function Sidebar({ isOpen, setIsOpen }) {
       {/* Mobile overlay */}
       {isOpen && (
         <div 
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black/50 z-[45] lg:hidden"
           onClick={() => setIsOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <aside 
-        className={`fixed left-0 top-0 h-full w-[280px] bg-white border-r border-[#e5e7eb] z-50 transition-transform duration-300 lg:translate-x-0 ${
+        className={`fixed left-0 top-0 h-dvh w-[280px] bg-white border-r border-[#e5e7eb] z-50 transition-transform duration-300 lg:translate-x-0 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
@@ -76,7 +76,7 @@ export default function Sidebar({ isOpen, setIsOpen }) {
         </div>
 
         {/* Navigation */}
-        <nav className="py-4 overflow-y-auto h-[calc(100%-72px)]">
+        <nav className="py-4 pb-24 overflow-y-auto h-[calc(100%-72px)]">
           <NavLink to="/dashboard" end className={navLinkClass} data-testid="nav-dashboard">
             <LayoutDashboard className="w-5 h-5" />
             Dashboard

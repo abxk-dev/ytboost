@@ -571,7 +571,7 @@ export default function AdminServices() {
 
       {/* Bulk bar */}
       {selectedCount > 0 && (
-        <div className={`sticky top-2 z-20 flex flex-wrap items-center gap-2 rounded-[12px] border px-4 py-3 shadow-lg ${c.card} ${c.border}`}>
+        <div className={`sticky top-[88px] z-30 flex flex-wrap items-center gap-2 rounded-[12px] border px-4 py-3 shadow-lg ${c.card} ${c.border}`}>
           <span className={`text-sm font-medium ${c.text}`}>{selectedCount} selected</span>
           <Select value={bulkAction} onValueChange={setBulkAction}>
             <SelectTrigger className={`w-[170px] ${c.input}`}><SelectValue placeholder="Bulk action" /></SelectTrigger>

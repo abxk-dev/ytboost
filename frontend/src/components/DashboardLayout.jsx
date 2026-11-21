@@ -58,11 +58,11 @@ export default function DashboardLayout() {
       <Sidebar isOpen={sidebarOpen} setIsOpen={setSidebarOpen} />
       <Topbar onMenuClick={() => setSidebarOpen(true)} />
       
-      <main className="lg:ml-[280px] p-4 pt-[72px] lg:p-6 lg:pt-[72px] min-h-screen">
+      <main className="lg:ml-[280px] p-4 pt-[96px] lg:p-6 lg:pt-[96px] min-w-0 min-h-screen">
         {enabled && message && !bannerDismissed && (
           <div className={`mb-4 rounded-[12px] border px-4 py-3 flex items-start justify-between gap-3 ${bannerColors[type] || bannerColors.info}`}>
             <div className="text-sm font-medium whitespace-pre-wrap">{message}</div>
-            <button onClick={dismiss} className="p-1 rounded-md hover:bg-black/5" aria-label="Dismiss announcement">
+            <button onClick={dismiss} className="p-2 -m-1 rounded-md hover:bg-black/5" aria-label="Dismiss announcement">
               <X className="w-4 h-4" />
             </button>
           </div>
